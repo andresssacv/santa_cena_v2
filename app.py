@@ -1,12 +1,17 @@
-from flask import Flask, request, jsonify, render_template, send_file
+from flask import Flask, request, jsonify, render_template, Response
 from flask_cors import CORS
 from itsdangerous import URLSafeSerializer, BadSignature
 import urllib.parse
 import os
 import unicodedata
 import time
+import csv
+import io
 
-app = Flask(__name__)
+base_dir = os.path.dirname(os.path.abspath(__file__))
+template_dir = os.path.join(base_dir, 'templates')
+
+app = Flask(__name__, template_folder=template_dir)
 CORS(app)
 
 # ======================
@@ -1102,20 +1107,24 @@ def admin_export():
         return jsonify({"status": "error", "message": "Acceso solo administrador"}), 403
 
     res = supabase.table("registros_santa_cena").select("*").execute()
+    rows = res.data or []
 
-    try:
-        import pandas as pd
-    except Exception:
-        return jsonify({"status": "error", "message": "Pandas no disponible en el servidor"}), 503
+    output = io.StringIO()
+    if rows:
+        writer = csv.DictWriter(output, fieldnames=list(rows[0].keys()))
+        writer.writeheader()
+        writer.writerows(rows)
+    else:
+        output.write("id,nombre,fila,sector,culto,telefono\n")
 
-    df = pd.DataFrame(res.data)
-    path = "export.csv"
-    df.to_csv(path, index=False)
-
-    return send_file(path, as_attachment=True)
+    return Response(
+        output.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": "attachment;filename=export_santa_cena.csv"}
+    )
 
 # ======================
-# RUN FOR RENDER
+# RUN FOR LOCAL / RENDER
 # ======================
 
 if __name__ == '__main__':
