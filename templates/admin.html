@@ -57,15 +57,19 @@
           ✝
         </div>
         <div>
-          <h1 class="text-base sm:text-lg font-extrabold text-slate-900 tracking-tight leading-none">
+          <h1 id="headerTitulo" class="text-base sm:text-lg font-extrabold text-slate-900 tracking-tight leading-none">
             Santa Cena 2026
           </h1>
-          <p class="text-xs text-slate-500 font-medium">Gestión, Captación e Informes</p>
+          <p id="headerSubtitulo" class="text-xs text-slate-500 font-medium">Gestión, Captación e Informes</p>
         </div>
       </div>
 
       <!-- Acciones de usuario -->
       <div class="flex items-center gap-2 sm:gap-3">
+        <span id="badgeUsuario" class="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-700 bg-slate-100 border border-slate-200">
+          👤 <span id="nombreUsuarioActivo">Usuario</span>
+        </span>
+
         <a href="/mapa" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 transition">
           <svg class="w-4 h-4 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/></svg>
           <span class="hidden sm:inline">Ir al Mapa</span>
@@ -121,6 +125,12 @@
         <!-- Filtros Rápidos -->
         <div class="flex flex-wrap items-center gap-2">
           
+          <!-- Filtro Fecha (Histórico vs Hoy) -->
+          <select id="filtroFecha" onchange="filtrarRegistros()" class="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs sm:text-sm font-bold text-slate-700 outline-none focus:border-[#8b1e2d]">
+            <option value="todos">📜 Todo el Histórico Mensual</option>
+            <option value="hoy">📅 Solo Hoy / Evento Actual</option>
+          </select>
+
           <!-- Filtro Culto -->
           <select id="filtroCulto" onchange="filtrarRegistros()" class="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs sm:text-sm font-bold text-slate-700 outline-none focus:border-[#8b1e2d]">
             <option value="todos">Todos los Cultos</option>
@@ -156,7 +166,7 @@
       <!-- Resumen contador -->
       <div class="flex items-center justify-between px-1 text-xs text-slate-500 font-semibold">
         <span id="contadorRegistros">Cargando registros...</span>
-        <button onclick="cargarRegistros()" class="text-indigo-600 hover:underline flex items-center gap-1">
+        <button onclick="cargarRegistros()" class="text-[#8b1e2d] font-bold hover:underline flex items-center gap-1">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
           Actualizar lista
         </button>
@@ -446,7 +456,7 @@
 
         <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
           <span class="text-xs font-extrabold uppercase text-slate-400 tracking-wider">Diferencia Neta</span>
-          <div id="card-diferencia" class="text-3xl font-black text-indigo-600 mt-2">0</div>
+          <div id="card-diferencia" class="text-3xl font-black text-[#8b1e2d] mt-2">0</div>
           <span id="card-conciliacion-sub" class="text-xs text-slate-500 font-medium">Por conciliar</span>
         </div>
 
@@ -664,6 +674,11 @@
     }
 
     function cambiarTab(tab) {
+      if (!isAdminGlobal && (tab === 'dashboard' || tab === 'metricas')) {
+        alert('Este panel está reservado exclusivamente para la administración.');
+        return;
+      }
+
       ['registros', 'dashboard', 'metricas'].forEach(t => {
         const sec = document.getElementById(`tab-${t}`);
         const btn = document.getElementById(`tabBtn-${t}`);
@@ -694,6 +709,27 @@
         registrosGlobales = Array.isArray(data?.rows) ? data.rows : [];
         isAdminGlobal = !!data?.is_admin;
 
+        // Mostrar u ocultar pestañas de dashboard y conteo según rol
+        const tabDash = document.getElementById('tabBtn-dashboard');
+        const tabMetr = document.getElementById('tabBtn-metricas');
+        if (tabDash) tabDash.classList.toggle('hidden', !isAdminGlobal);
+        if (tabMetr) tabMetr.classList.toggle('hidden', !isAdminGlobal);
+
+        // Nombre y títulos dinámicos
+        const userName = data?.current_user_name || 'Hermana Captadora';
+        const userBadge = document.getElementById('nombreUsuarioActivo');
+        if (userBadge) userBadge.textContent = userName;
+
+        const headerTitulo = document.getElementById('headerTitulo');
+        const headerSub = document.getElementById('headerSubtitulo');
+        if (isAdminGlobal) {
+          if (headerTitulo) headerTitulo.textContent = 'Panel General de Administración';
+          if (headerSub) headerSub.textContent = `Administrador: ${userName} · Control Total`;
+        } else {
+          if (headerTitulo) headerTitulo.textContent = 'Mis Registros';
+          if (headerSub) headerSub.textContent = `Captadora: ${userName} · Servicio en Vivo`;
+        }
+
         // Mostrar elementos de admin
         document.getElementById('btnResetTotal').classList.toggle('hidden', !isAdminGlobal);
         document.getElementById('thRegistrador').classList.toggle('hidden', !isAdminGlobal);
@@ -711,18 +747,29 @@
       const q = (document.getElementById('filtroBusqueda').value || '').toLowerCase().trim();
       const culto = document.getElementById('filtroCulto').value;
       const sector = document.getElementById('filtroSector').value;
+      const filtroFecha = document.getElementById('filtroFecha')?.value || 'todos';
+      
+      const hoyStr = new Date().toISOString().slice(0, 10);
 
       const filtrados = registrosGlobales.filter(r => {
+        // Filtro Fecha (Histórico vs Hoy)
+        if (filtroFecha === 'hoy') {
+          const rFecha = (r.fecha || (r.created_at || '')).slice(0, 10);
+          if (rFecha !== hoyStr) return false;
+        }
+
         // Filtro Culto
         if (culto !== 'todos' && (r.culto || '11:00') !== culto) return false;
+
         // Filtro Sector
         if (sector !== 'todos' && String(r.sector) !== String(sector)) return false;
+
         // Filtro Búsqueda
         if (q) {
           const matchNombre = (r.nombre || '').toLowerCase().includes(q);
           const matchFila = String(r.fila || '').toLowerCase().includes(q);
           const matchTel = String(r.telefono || '').toLowerCase().includes(q);
-          const matchCap = String(r.registrador_email || '').toLowerCase().includes(q);
+          const matchCap = String(r.registrador_nombre || r.registrador_email || '').toLowerCase().includes(q);
           if (!matchNombre && !matchFila && !matchTel && !matchCap) return false;
         }
         return true;
@@ -756,9 +803,15 @@
           ? `<a href="${r.url_whatsapp}" target="_blank" class="p-1.5 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition inline-flex items-center" title="Abrir WhatsApp">📲</a>`
           : '';
 
+        const nombreCaptadora = r.registrador_nombre || (r.registrador_email || '').split('@')[0] || 'Captadora';
+        const fechaStr = r.fecha ? `<div class="text-[10px] text-slate-400 font-medium">📅 ${r.fecha}</div>` : '';
+
         return `
           <tr class="hover:bg-slate-50/80 transition">
-            <td class="py-3 px-4 font-bold text-slate-900">${r.nombre || '—'}</td>
+            <td class="py-3 px-4">
+              <div class="font-bold text-slate-900">${r.nombre || '—'}</div>
+              ${fechaStr}
+            </td>
             <td class="py-3 px-4">${telHtml}</td>
             <td class="py-3 px-4 text-center">
               <span class="inline-block px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800 font-black text-xs">#${r.fila || '—'}</span>
@@ -768,11 +821,17 @@
               <div class="text-[11px] text-slate-400 font-medium">${r.mesa_label || 'Mesón'}</div>
             </td>
             <td class="py-3 px-4 text-center">${cultoBadge}</td>
-            ${isAdminGlobal ? `<td class="py-3 px-4 text-xs text-slate-500">${(r.registrador_email || '').split('@')[0]}</td>` : ''}
+            ${isAdminGlobal ? `
+              <td class="py-3 px-4">
+                <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-50 border border-rose-200/60 text-[#8b1e2d] font-bold text-xs">
+                  <span>👩‍💼</span> ${nombreCaptadora}
+                </span>
+              </td>
+            ` : ''}
             <td class="py-3 px-4 text-right">
               <div class="inline-flex items-center gap-1.5">
                 ${waBtn}
-                <button onclick="abrirModalEditar('${r.id}')" class="p-1.5 rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition" title="Editar Registro">✏️</button>
+                <button onclick="abrirModalEditar('${r.id}')" class="p-1.5 rounded-lg bg-rose-50 text-[#8b1e2d] hover:bg-rose-100 transition" title="Editar Registro">✏️</button>
                 <button onclick="borrarRegistro('${r.id}')" class="p-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition" title="Eliminar">🗑️</button>
               </div>
             </td>

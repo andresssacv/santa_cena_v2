@@ -115,8 +115,84 @@ def get_current_user():
 
 
 def require_admin(user):
-    email = (user.email or "").lower()
-    return email in ADMIN_EMAILS
+    if not user:
+        return False
+    email = (user.email or "").strip().lower()
+    # 1. Comparar con lista de ADMIN_EMAILS
+    if email in ADMIN_EMAILS:
+        return True
+    for admin_e in ADMIN_EMAILS:
+        if admin_e and (admin_e in email or email in admin_e):
+            return True
+    # 2. Reconocer cuenta de Juan Acevedo
+    if "juan" in email and "acevedo" in email:
+        return True
+    return False
+
+
+MAPEO_CAPTADORAS = {
+    "juan": "Juan Acevedo",
+    "juan.acevedo": "Juan Acevedo",
+    "paula": "Paula",
+    "cecilia": "Cecilia",
+    "danitza": "Danitza",
+    "carla": "Carla",
+    "ingrid": "Ingrid",
+    "elizabeth": "Elizabeth",
+    "maria": "María",
+    "ligia": "Ligia",
+    "carolina": "Carolina",
+    "nataly": "Nataly",
+    "fanny": "Fanny",
+    "carmengloria": "Carmen Gloria",
+    "carmen.gloria": "Carmen Gloria",
+    "carmen": "Carmen Gloria",
+    "antonia": "Antonia"
+}
+
+
+def obtener_nombre_captadora(user_or_email, user_obj=None):
+    """Devuelve el nombre real de la captadora en lugar de su correo."""
+    if user_obj and hasattr(user_obj, 'user_metadata') and user_obj.user_metadata:
+        meta = user_obj.user_metadata or {}
+        name = meta.get('full_name') or meta.get('name') or meta.get('nombre')
+        if name:
+            return str(name).strip()
+
+    email = str(user_or_email or "").strip().lower()
+    if not email:
+        return "Captadora"
+
+    username = email.split('@')[0]
+    username_norm = normalize_text(username)
+
+    for k, v in MAPEO_CAPTADORAS.items():
+        if k in username_norm:
+            return v
+
+    partes = [p.capitalize() for p in username.replace('.', ' ').replace('_', ' ').replace('-', ' ').split() if not p.isdigit()]
+    return " ".join(partes) or "Captadora"
+
+
+def obtener_fecha_hoy():
+    """Retorna la fecha actual en formato YYYY-MM-DD."""
+    import datetime
+    return datetime.date.today().isoformat()
+
+
+def es_mismo_evento(created_at_str, target_fecha=None):
+    """Verifica si un timestamp corresponde al evento/fecha objetivo (por defecto hoy)."""
+    if not created_at_str:
+        return True
+    try:
+        fecha_str = str(created_at_str)[:10]
+        import datetime
+        if target_fecha:
+            return fecha_str == str(target_fecha)[:10]
+        hoy = datetime.date.today().isoformat()
+        return fecha_str == hoy
+    except Exception:
+        return True
 
 
 def normalize_text(value):
@@ -522,40 +598,51 @@ def enviar_asignacion():
 
             actualizar_o_guardar_contacto(nombre.strip(), telefono_destino)
 
-        # --- VALIDAR NOMBRE REPETIDO ---
-        nombre_existente = (
+        # --- VALIDAR NOMBRE REPETIDO (EN EL MISMO CULTO Y EVENTO) ---
+        query_nombre = (
             supabase.table("registros_santa_cena")
-            .select("id, fila")
+            .select("id, fila, culto, created_at, fecha_evento")
             .ilike("nombre", nombre.strip())
             .execute()
         )
 
-        if nombre_existente.data:
-            fila_actual = nombre_existente.data[0].get("fila")
-            return jsonify({
-                "status": "error",
-                "message": f"Este hermano ya está registrado en la fila {fila_actual}"
-            }), 400
+        for reg_n in (query_nombre.data or []):
+            reg_culto = reg_n.get("culto") or inferir_culto_de_fecha(reg_n.get("created_at"))
+            if reg_culto == culto and es_mismo_evento(reg_n.get("fecha_evento") or reg_n.get("created_at")):
+                return jsonify({
+                    "status": "error",
+                    "message": f"Este hermano ya está registrado en la fila {reg_n.get('fila')} para el culto de las {culto}"
+                }), 400
 
-        # --- VALIDAR FILA REPETIDA ---
-        fila_existente = supabase.table("registros_santa_cena") \
-            .select("id, nombre") \
-            .eq("fila", fila) \
+        # --- VALIDAR FILA REPETIDA (EN EL MISMO CULTO Y EVENTO) ---
+        # Ahora Fila 14 puede ser usada a las 11:00 y a las 18:30 sin conflicto ni borrado de tabla
+        query_fila = (
+            supabase.table("registros_santa_cena")
+            .select("id, nombre, culto, created_at, fecha_evento")
+            .eq("fila", fila)
             .execute()
+        )
 
-        if fila_existente.data:
-            return jsonify({
-                "status": "error",
-                "message": f"Fila ya ocupada por {fila_existente.data[0].get('nombre', 'otro hermano')}"
-            }), 400
+        for reg_f in (query_fila.data or []):
+            reg_culto = reg_f.get("culto") or inferir_culto_de_fecha(reg_f.get("created_at"))
+            if reg_culto == culto and es_mismo_evento(reg_f.get("fecha_evento") or reg_f.get("created_at")):
+                return jsonify({
+                    "status": "error",
+                    "message": f"Fila {fila} ya está ocupada en el culto de las {culto} por {reg_f.get('nombre', 'otro hermano')}"
+                }), 400
 
-        # --- GUARDAR REGISTRO ---
+        # --- GUARDAR REGISTRO CON NOMBRE DE CAPTADORA Y FECHA ---
+        nombre_captadora = obtener_nombre_captadora(user.email, user)
+        fecha_hoy = obtener_fecha_hoy()
+
         insert_payload = {
             "nombre": nombre.strip(),
             "fila": fila,
             "sector": str(sector),
             "registrador_id": user.id,
             "registrador_email": user.email,
+            "registrador_nombre": nombre_captadora,
+            "fecha_evento": fecha_hoy,
             "culto": culto,
             "telefono": telefono_destino
         }
@@ -567,6 +654,8 @@ def enviar_asignacion():
             if "column" in msg or "schema" in msg:
                 insert_payload.pop("telefono", None)
                 insert_payload.pop("culto", None)
+                insert_payload.pop("registrador_nombre", None)
+                insert_payload.pop("fecha_evento", None)
                 supabase.table("registros_santa_cena").insert(insert_payload).execute()
             else:
                 raise insert_err
@@ -626,7 +715,6 @@ def registros_listar():
     nombres_sin_tel = [r.get("nombre") for r in rows if not r.get("telefono") and r.get("nombre")]
     if nombres_sin_tel:
         try:
-            # Traer contactos y armar diccionario
             contactos_res = supabase.table("contactos").select("nombre, telefono").limit(500).execute()
             tel_map = {
                 normalize_text(c.get("nombre", "")): str(c.get("telefono", "")).strip()
@@ -640,10 +728,13 @@ def registros_listar():
         except Exception as e:
             app.logger.warning(f"No se pudieron enriquecer telefonos: {e}")
 
-    # Enriquecer con culto inferido y enlace de whatsapp
+    # Enriquecer con culto inferido, enlace de whatsapp, nombre real de captadora y fecha
     for r in rows:
         if not r.get("culto"):
             r["culto"] = inferir_culto_de_fecha(r.get("created_at"))
+        if not r.get("registrador_nombre"):
+            r["registrador_nombre"] = obtener_nombre_captadora(r.get("registrador_email"))
+        r["fecha"] = str(r.get("fecha_evento") or r.get("created_at") or "")[:10]
         tel = r.get("telefono")
         if tel:
             r["url_whatsapp"] = construir_whatsapp_link(
@@ -651,7 +742,12 @@ def registros_listar():
             )
         r["mesa_label"] = obtener_mesa_label(r.get("sector"))
 
-    return jsonify({"rows": sort_registros_by_fila(rows), "is_admin": is_admin})
+    return jsonify({
+        "rows": sort_registros_by_fila(rows),
+        "is_admin": is_admin,
+        "current_user_email": user.email,
+        "current_user_name": obtener_nombre_captadora(user.email, user)
+    })
 
 
 @app.route('/registros/editar', methods=['POST'])
@@ -689,17 +785,24 @@ def registros_editar():
     if not nuevo_sector or str(nueva_fila) != str(reg.get("fila")):
         nuevo_sector = obtener_sector_de_fila(nueva_fila) or reg.get("sector")
 
-    # Si cambió la fila, verificar que no esté ocupada por otro registro
+    # Si cambió la fila, verificar que no esté ocupada en ESE culto y fecha
     if nueva_fila and nueva_fila != str(reg.get("fila")):
-        q_check = supabase.table("registros_santa_cena").select("id, nombre").eq("fila", nueva_fila).neq("id", registro_id)
-        res_check = q_check.execute()
-        if res_check.data:
-            return jsonify({
-                "status": "error",
-                "message": f"La fila {nueva_fila} ya está asignada a {res_check.data[0].get('nombre', 'otro hermano')}"
-            }), 400
+        q_check = (
+            supabase.table("registros_santa_cena")
+            .select("id, nombre, culto, fecha_evento, created_at")
+            .eq("fila", nueva_fila)
+            .neq("id", registro_id)
+            .execute()
+        )
+        for cand in (q_check.data or []):
+            cand_culto = cand.get("culto") or inferir_culto_de_fecha(cand.get("created_at"))
+            if cand_culto == nuevo_culto and es_mismo_evento(cand.get("fecha_evento") or cand.get("created_at")):
+                return jsonify({
+                    "status": "error",
+                    "message": f"La fila {nueva_fila} ya está ocupada en el culto de las {nuevo_culto} por {cand.get('nombre', 'otro hermano')}"
+                }), 400
 
-    # Sincronizar contacto en la tabla contactos
+    # Sincronizar contacto en la tabla contactos de Supabase
     if nuevo_nombre and nuevo_telefono:
         actualizar_o_guardar_contacto(nuevo_nombre, nuevo_telefono, reg.get("nombre"))
 
@@ -738,6 +841,7 @@ def registros_editar():
             "fila": nueva_fila,
             "sector": nuevo_sector,
             "culto": nuevo_culto,
+            "registrador_nombre": reg.get("registrador_nombre") or obtener_nombre_captadora(reg.get("registrador_email")),
             "mesa_label": obtener_mesa_label(nuevo_sector)
         }
     })
@@ -803,7 +907,7 @@ def registros_whatsapp_url(registro_id):
 
 @app.route('/dashboard/stats')
 def dashboard_stats():
-    """Genera las métricas completas para el Dashboard e Informes ejecutivos."""
+    """Genera las métricas reales para el Administrador (Juan Acevedo)."""
     supabase_error = require_supabase()
     if supabase_error:
         return supabase_error
@@ -811,6 +915,10 @@ def dashboard_stats():
     user, err, code = get_current_user()
     if err:
         return err, code
+
+    # SEGURIDAD: Solo Juan Acevedo / Administrador puede ver el dashboard
+    if not require_admin(user):
+        return jsonify({"status": "error", "message": "Acceso restringido solo al administrador (Juan Acevedo)"}), 403
 
     res = supabase.table("registros_santa_cena").select("*").execute()
     rows = res.data or []
@@ -844,13 +952,12 @@ def dashboard_stats():
         except (ValueError, TypeError):
             sector_num = 0
 
-        email = r.get("registrador_email") or "Anónimo"
-        nombre_captadora = email.split("@")[0].replace(".", " ").title()
+        # Obtener NOMBRE REAL de la captadora (nunca email crudo)
+        nombre_captadora = r.get("registrador_nombre") or obtener_nombre_captadora(r.get("registrador_email"))
 
         if nombre_captadora not in captadoras_map:
             captadoras_map[nombre_captadora] = {
                 "nombre": nombre_captadora,
-                "email": email,
                 "c11": 0,
                 "c18": 0,
                 "total": 0
@@ -896,19 +1003,19 @@ def dashboard_stats():
     count_zonas_11 = sum(1 for z in zonas_list if z["c11"] > 0)
     count_zonas_18 = sum(1 for z in zonas_list if z["c18"] > 0)
 
-    # Cargar métricas de asistencia/conteo/no cenaron si existen
+    # Cargar métricas reales (por defecto 0 si no se han guardado aún)
     metricas = {
-        "asistencia_11": 4636,
-        "asistencia_18": 2369,
-        "conteo_11": 4767,
-        "conteo_18": 2164,
-        "no_cenaron": 14,
-        "unt_kids_am": 79,
-        "unt_kids_pm": 18,
-        "kilo_amor": 18,
-        "camaras_am": 25,
-        "camaras_pm": 3,
-        "observaciones": "Datos de conciliación Santa Cena"
+        "asistencia_11": 0,
+        "asistencia_18": 0,
+        "conteo_11": 0,
+        "conteo_18": 0,
+        "no_cenaron": 0,
+        "unt_kids_am": 0,
+        "unt_kids_pm": 0,
+        "kilo_amor": 0,
+        "camaras_am": 0,
+        "camaras_pm": 0,
+        "observaciones": ""
     }
     try:
         m_res = supabase.table("metricas_culto").select("*").order("updated_at", desc=True).limit(1).execute()
@@ -938,7 +1045,7 @@ def dashboard_stats():
 
 @app.route('/admin/metricas_culto', methods=['GET', 'POST'])
 def admin_metricas_culto():
-    """Obtiene o actualiza las métricas de asistencia, conteo y no cenaron."""
+    """Obtiene o actualiza las métricas de asistencia, conteo y no cenaron para el Administrador."""
     supabase_error = require_supabase()
     if supabase_error:
         return supabase_error
@@ -946,6 +1053,10 @@ def admin_metricas_culto():
     user, err, code = get_current_user()
     if err:
         return err, code
+
+    # SEGURIDAD: Solo Administrador (Juan Acevedo)
+    if not require_admin(user):
+        return jsonify({"status": "error", "message": "Acceso restringido solo al administrador (Juan Acevedo)"}), 403
 
     if request.method == 'GET':
         defaults = {
@@ -963,9 +1074,6 @@ def admin_metricas_culto():
         except Exception:
             pass
         return jsonify({"status": "success", "metricas": defaults})
-
-    if not require_admin(user):
-        return jsonify({"status": "error", "message": "Acceso solo administrador"}), 403
 
     data = request.get_json(silent=True) or {}
     payload = {

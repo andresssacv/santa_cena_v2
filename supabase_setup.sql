@@ -11,12 +11,19 @@ ALTER TABLE IF EXISTS registros_santa_cena
     ADD COLUMN IF NOT EXISTS culto TEXT DEFAULT '11:00';
 
 ALTER TABLE IF EXISTS registros_santa_cena 
+    ADD COLUMN IF NOT EXISTS registrador_nombre TEXT;
+
+ALTER TABLE IF EXISTS registros_santa_cena 
+    ADD COLUMN IF NOT EXISTS fecha_evento DATE DEFAULT CURRENT_DATE;
+
+ALTER TABLE IF EXISTS registros_santa_cena 
     ADD COLUMN IF NOT EXISTS estado TEXT DEFAULT 'activo';
 
 -- Índices para búsqueda rápida
 CREATE INDEX IF NOT EXISTS idx_registros_culto ON registros_santa_cena(culto);
 CREATE INDEX IF NOT EXISTS idx_registros_fila ON registros_santa_cena(fila);
 CREATE INDEX IF NOT EXISTS idx_registros_nombre ON registros_santa_cena(nombre);
+CREATE INDEX IF NOT EXISTS idx_registros_fecha ON registros_santa_cena(fecha_evento);
 
 -- 2. Asegurar que la tabla 'contactos' tenga índices adecuados
 CREATE INDEX IF NOT EXISTS idx_contactos_nombre ON contactos(nombre);
@@ -39,6 +46,3 @@ CREATE TABLE IF NOT EXISTS metricas_culto (
     observaciones TEXT,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
-
--- Habilitar RLS o políticas si las usas (opcional)
--- ALTER TABLE metricas_culto ENABLE ROW LEVEL SECURITY;

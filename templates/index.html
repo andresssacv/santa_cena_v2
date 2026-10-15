@@ -621,20 +621,20 @@
                             {/* Buscador */}
                             <div className="flex flex-wrap gap-2 items-center">
                                 <div className="relative flex-1">
-                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-indigo-600 font-black text-sm">#</span>
+                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8b1e2d] font-black text-sm">#</span>
                                     <input 
                                         type="number" 
                                         inputMode="numeric"
                                         enterKeyHint="go"
                                         placeholder="Ingrese Fila..." 
-                                        className="w-full pl-7 pr-3 py-2 bg-slate-50 border-2 border-slate-200 rounded-xl focus:border-indigo-500 focus:bg-white outline-none text-base font-bold shadow-inner text-slate-700 placeholder-slate-400"
+                                        className="w-full pl-7 pr-3 py-2 bg-slate-50 border-2 border-slate-200 rounded-xl focus:border-[#8b1e2d] focus:bg-white outline-none text-base font-bold shadow-inner text-slate-700 placeholder-slate-400"
                                         value={trayNumber}
                                         onChange={(e) => setTrayNumber(e.target.value)}
                                         onClick={(e) => e.target.select()}
                                         onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
                                     />
                                 </div>
-                                <a href="/admin" target="_blank" rel="noopener noreferrer" className="bg-indigo-600 text-white px-3 py-2 rounded-xl text-xs font-bold hover:bg-indigo-700 whitespace-nowrap w-full sm:w-auto">
+                                <a href="/admin" target="_blank" rel="noopener noreferrer" className="bg-[#8b1e2d] text-white px-3 py-2 rounded-xl text-xs font-bold hover:bg-[#701824] whitespace-nowrap w-full sm:w-auto shadow-sm">
                                     Admin
                                 </a>
                                 <button
@@ -700,7 +700,7 @@
                                             {/* BOTÓN DE ZOOM MANUAL */}
                                             <button 
                                                 onClick={() => performZoomToSector(activeSector)}
-                                                className="bg-indigo-600 text-white px-2 py-1 rounded-md text-[10px] font-bold shadow-sm hover:bg-indigo-700 flex items-center gap-1"
+                                                className="bg-[#8b1e2d] text-white px-2 py-1 rounded-md text-[10px] font-bold shadow-sm hover:bg-[#701824] flex items-center gap-1"
                                             >
                                                 🔍 Acercar
                                             </button>
@@ -724,7 +724,7 @@
                                             }}
                                             className={`flex-shrink-0 w-8 h-8 rounded-lg font-black text-xs transition-all border-2
                                                 ${selectedId === s.id 
-                                                    ? 'bg-indigo-600 text-white border-indigo-800 scale-105 shadow-md' 
+                                                    ? 'bg-[#8b1e2d] text-white border-[#701824] scale-105 shadow-md' 
                                                     : 'bg-white text-slate-400 border-slate-100 hover:bg-slate-50'}`}
                                         >
                                             {s.id}
@@ -751,7 +751,7 @@
                                         }}
                                         onBlur={() => setTimeout(() => setMostrarListaSugerencias(false), 120)}
                                         placeholder="Ej: Andres Acevedo"
-                                        className="w-full p-4 bg-slate-100 border-2 border-transparent focus:border-blue-500 focus:bg-white rounded-2xl outline-none transition-all font-bold text-slate-700"
+                                        className="w-full p-4 bg-slate-100 border-2 border-transparent focus:border-[#8b1e2d] focus:bg-white rounded-2xl outline-none transition-all font-bold text-slate-700"
                                     />
                                     {mostrarListaSugerencias && nombreSugerencias.length > 0 && (
                                         <div className="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-xl max-h-48 overflow-y-auto">
@@ -761,7 +761,7 @@
                                                     type="button"
                                                     onMouseDown={(e) => e.preventDefault()}
                                                     onClick={() => seleccionarSugerenciaNombre(item)}
-                                                    className="w-full text-left px-3 py-2 hover:bg-indigo-50 border-b border-slate-100 last:border-b-0"
+                                                    className="w-full text-left px-3 py-2 hover:bg-rose-50 border-b border-slate-100 last:border-b-0"
                                                 >
                                                     <div className="font-bold text-slate-800">{item.nombre}</div>
                                                     <div className="text-xs text-slate-500">{item.telefono || 'Sin teléfono'}</div>
@@ -773,7 +773,7 @@
                                 {/* --- INTEGRACIÓN DEL CAMPO DE TELÉFONO --- */}
                                 {mostrandoCampoTelefono && (
                                     <div className="animate-in fade-in slide-in-from-top-2 duration-300">
-                                        <label className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-2 block ml-2">
+                                        <label className="text-[10px] font-black text-[#8b1e2d] uppercase tracking-widest mb-2 block ml-2">
                                             ⚠️ Hermano nuevo - Ingrese Teléfono
                                         </label>
                                         <input 
@@ -781,21 +781,21 @@
                                             value={telefono}
                                             onChange={(e) => setTelefono(e.target.value)}
                                             placeholder="Ej: 56912345678"
-                                            className="w-full p-4 bg-amber-50 border-2 border-amber-400 rounded-2xl outline-none font-bold text-slate-700"
+                                            className="w-full p-4 bg-rose-50 border-2 border-rose-300 rounded-2xl outline-none font-bold text-slate-700"
                                             autoFocus
                                         />
                                     </div>
                                 )}
                                 <button 
                                     onClick={() => enviarAlBackend()}
-                                    className="w-full bg-green-600 hover:bg-green-700 text-white font-extrabold p-4 rounded-2xl shadow-lg transition-all active:scale-95"
+                                    className="w-full bg-[#8b1e2d] hover:bg-[#701824] text-white font-black p-4 rounded-2xl shadow-lg transition-all active:scale-95"
                                 >
-                                    REGISTRAR Y ENVIAR
+                                    REGISTRAR Y ENVIAR WHATSAPP
                                 </button>
                             </div>
                         ) : (
                             // MODO HERMANO: Se ve la fila asignada en grande
-                            <div className="p-6 space-y-2 bg-blue-600 text-white shadow-xl">
+                            <div className="p-6 space-y-2 bg-[#8b1e2d] text-white shadow-xl">
                                 <p className="text-xs font-black uppercase tracking-widest opacity-80">Tu Ubicación Asignada</p>
                                 <h2 className="text-5xl font-black italic">FILA {trayNumber}</h2>
                                 <p className="text-sm font-medium opacity-90">Por favor, diríjase al sector resaltado en el mapa.</p>
@@ -906,12 +906,12 @@
                                                     }}
                                                     className={`absolute ${s.pos} ${s.w} ${s.h} flex flex-col transition-all duration-500 cursor-pointer ${containerClass}`}
                                                 >
-                                                    <div className={`${growA} rounded-t-lg border-2 seat-texture relative flex items-center justify-center transition-colors duration-300 ${highlightA ? 'bg-indigo-600 border-indigo-400' : `${st.bg} ${st.border}`}`}>
+                                                    <div className={`${growA} rounded-t-lg border-2 seat-texture relative flex items-center justify-center transition-colors duration-300 ${highlightA ? 'bg-[#8b1e2d] border-rose-400 shadow-md ring-2 ring-[#8b1e2d]/40' : `${st.bg} ${st.border}`}`}>
                                                         <span className={`text-[8px] font-bold uppercase opacity-60 ${highlightA ? 'text-white' : s.text}`}>{isSelected ? 'FRENTE' : 'A'}</span>
                                                         {highlightA && <div className="absolute top-1 right-1 w-2 h-2 bg-yellow-400 rounded-full animate-pulse shadow-lg"></div>}
                                                     </div>
                                                     <div className="h-[6%] min-h-[2px] w-full flex items-center justify-center"><div className="w-full h-px bg-slate-300/30"></div></div>
-                                                    <div className={`${growB} rounded-b-lg border-2 seat-texture relative flex items-center justify-center transition-colors duration-300 ${highlightB ? 'bg-indigo-600 border-indigo-400' : `${st.bg} ${st.border}`}`}>
+                                                    <div className={`${growB} rounded-b-lg border-2 seat-texture relative flex items-center justify-center transition-colors duration-300 ${highlightB ? 'bg-[#8b1e2d] border-rose-400 shadow-md ring-2 ring-[#8b1e2d]/40' : `${st.bg} ${st.border}`}`}>
                                                         <span className={`text-[8px] font-bold uppercase opacity-60 ${highlightB ? 'text-white' : s.text}`}>{isSelected ? 'FONDO' : 'B'}</span>
                                                         {highlightB && <div className="absolute bottom-1 right-1 w-2 h-2 bg-yellow-400 rounded-full animate-pulse shadow-lg"></div>}
                                                     </div>
