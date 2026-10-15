@@ -118,14 +118,16 @@ def require_admin(user):
     if not user:
         return False
     email = (user.email or "").strip().lower()
-    # 1. Comparar con lista de ADMIN_EMAILS
+    # 1. Comparar con lista de ADMIN_EMAILS (variable de entorno)
     if email in ADMIN_EMAILS:
         return True
     for admin_e in ADMIN_EMAILS:
         if admin_e and (admin_e in email or email in admin_e):
             return True
-    # 2. Reconocer cuenta de Juan Acevedo
+    # 2. Cuentas de administrador fijas (Juan Acevedo y Andrés Acevedo)
     if "juan" in email and "acevedo" in email:
+        return True
+    if email == "andresss.acevedo123@gmail.com":
         return True
     return False
 
@@ -133,6 +135,9 @@ def require_admin(user):
 MAPEO_CAPTADORAS = {
     "juan": "Juan Acevedo",
     "juan.acevedo": "Juan Acevedo",
+    "andresss.acevedo123": "Andrés Acevedo",
+    "andresss": "Andrés Acevedo",
+    "andres": "Andrés",
     "paula": "Paula",
     "cecilia": "Cecilia",
     "danitza": "Danitza",
