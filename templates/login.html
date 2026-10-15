@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Iniciar sesión | Santa Cena</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-slate-100 flex items-center justify-center p-4">
+  <div class="w-full max-w-md bg-white rounded-2xl shadow-lg p-6">
+    <h1 class="text-2xl font-extrabold text-slate-800 mb-2">Ingreso Captadores</h1>
+    <p class="text-sm text-slate-500 mb-6">Inicia sesión para entrar a la página de registros.</p>
+
+    <form id="loginForm" class="space-y-4">
+      <div>
+        <label class="block text-xs uppercase tracking-wider font-bold text-slate-500 mb-2">Email</label>
+        <input id="email" type="email" required class="w-full border rounded-xl px-4 py-3" placeholder="tu@email.com">
+      </div>
+      <div>
+        <label class="block text-xs uppercase tracking-wider font-bold text-slate-500 mb-2">Contraseña</label>
+        <input id="password" type="password" required class="w-full border rounded-xl px-4 py-3" placeholder="********">
+      </div>
+      <button id="submitBtn" type="submit" class="w-full bg-indigo-600 text-white font-bold py-3 rounded-xl hover:bg-indigo-700">Entrar</button>
+      <p id="msg" class="text-sm text-red-600 hidden"></p>
+    </form>
+  </div>
+
+  <script>
+    const form = document.getElementById('loginForm');
+    const msg = document.getElementById('msg');
+    const submitBtn = document.getElementById('submitBtn');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      msg.classList.add('hidden');
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Ingresando...';
+
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+
+      try {
+        const res = await fetch('/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password })
+        });
+
+        const data = await res.json();
+
+        if (!res.ok || data.status !== 'success') {
+          throw new Error(data.message || 'No se pudo iniciar sesión');
+        }
+
+        localStorage.setItem('accessToken', data.access_token);
+        if (data.refresh_token) {
+          localStorage.setItem('refreshToken', data.refresh_token);
+        }
+        window.location.href = '/mapa';
+      } catch (err) {
+        msg.textContent = err.message || 'Error de conexión';
+        msg.classList.remove('hidden');
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Entrar';
+      }
+    });
+  </script>
+</body>
+</html>
