@@ -1,0 +1,1313 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Panel de Administración y Métricas · Santa Cena 2026</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Tailwind CSS & Chart.js -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- Google Font -->
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <style>
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background-color: #f8fafc;
+      color: #1e293b;
+    }
+
+    /* Print styles for Executive Report */
+    @media print {
+      body { background: white !important; padding: 0 !important; color: black !important; }
+      .no-print { display: none !important; }
+      .print-only { display: block !important; }
+      .page-break { page-break-before: always; }
+      .shadow-sm, .shadow-md, .shadow-lg, .shadow-xl { box-shadow: none !important; }
+      .border { border-color: #cbd5e1 !important; }
+    }
+
+    .tab-btn.active {
+      background-color: #8b1e2d;
+      color: white;
+      box-shadow: 0 4px 12px rgba(139, 30, 45, 0.25);
+    }
+  </style>
+</head>
+
+<body class="min-h-screen flex flex-col">
+
+  <!-- Check Auth immediately -->
+  <script>
+    const accessToken = localStorage.getItem('accessToken');
+    if (!accessToken) {
+      window.location.href = '/login';
+    }
+  </script>
+
+  <!-- NAVBAR SUPERIOR -->
+  <header class="no-print bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      
+      <!-- Logo y Título -->
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-[#8b1e2d] text-white flex items-center justify-center font-extrabold text-xl shadow-md">
+          ✝
+        </div>
+        <div>
+          <h1 id="headerTitulo" class="text-base sm:text-lg font-extrabold text-slate-900 tracking-tight leading-none">
+            Santa Cena 2026
+          </h1>
+          <p id="headerSubtitulo" class="text-xs text-slate-500 font-medium">Gestión, Captación e Informes</p>
+        </div>
+      </div>
+
+      <!-- Acciones de usuario -->
+      <div class="flex items-center gap-2 sm:gap-3">
+        <span id="badgeUsuario" class="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-700 bg-slate-100 border border-slate-200">
+          👤 <span id="nombreUsuarioActivo">Usuario</span>
+        </span>
+
+        <a href="/mapa" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 transition">
+          <svg class="w-4 h-4 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/></svg>
+          <span class="hidden sm:inline">Ir al Mapa</span>
+        </a>
+
+        <button onclick="cerrarSesion()" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-red-700 bg-red-50 hover:bg-red-100 transition">
+          <svg class="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+          <span class="hidden sm:inline">Salir</span>
+        </button>
+      </div>
+
+    </div>
+
+    <!-- TABS DE NAVEGACIÓN -->
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 border-t border-slate-100">
+      <nav class="flex space-x-2 py-2 overflow-x-auto no-scrollbar">
+        <button onclick="cambiarTab('registros')" id="tabBtn-registros" class="tab-btn active px-4 py-2 rounded-xl text-xs sm:text-sm font-bold text-slate-600 transition flex items-center gap-2 whitespace-nowrap">
+          <span>📋</span> Registros en Vivo
+        </button>
+        <button onclick="cambiarTab('dashboard')" id="tabBtn-dashboard" class="tab-btn px-4 py-2 rounded-xl text-xs sm:text-sm font-bold text-slate-600 transition flex items-center gap-2 whitespace-nowrap">
+          <span>📊</span> Dashboard e Informes
+        </button>
+        <button onclick="cambiarTab('metricas')" id="tabBtn-metricas" class="tab-btn px-4 py-2 rounded-xl text-xs sm:text-sm font-bold text-slate-600 transition flex items-center gap-2 whitespace-nowrap">
+          <span>⚖️</span> Conteo & "No Cenaron"
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- CONTENIDO PRINCIPAL -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+
+    <!-- ======================================================== -->
+    <!-- PESTAÑA 1: REGISTROS EN VIVO Y EDICIÓN -->
+    <!-- ======================================================== -->
+    <section id="tab-registros" class="space-y-4">
+      
+      <!-- Barra de Filtros y Búsqueda -->
+      <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
+        
+        <!-- Buscador -->
+        <div class="relative flex-1">
+          <svg class="w-5 h-5 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          <input 
+            id="filtroBusqueda" 
+            type="text" 
+            placeholder="Buscar por hermano, teléfono, fila..." 
+            class="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 placeholder-slate-400 focus:bg-white focus:border-[#8b1e2d] outline-none transition"
+            oninput="filtrarRegistros()"
+          />
+        </div>
+
+        <!-- Filtros Rápidos -->
+        <div class="flex flex-wrap items-center gap-2">
+          
+          <!-- Filtro Fecha (Histórico vs Hoy) -->
+          <select id="filtroFecha" onchange="filtrarRegistros()" class="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs sm:text-sm font-bold text-slate-700 outline-none focus:border-[#8b1e2d]">
+            <option value="todos">📜 Todo el Histórico Mensual</option>
+            <option value="hoy">📅 Solo Hoy / Evento Actual</option>
+          </select>
+
+          <!-- Filtro Culto -->
+          <select id="filtroCulto" onchange="filtrarRegistros()" class="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs sm:text-sm font-bold text-slate-700 outline-none focus:border-[#8b1e2d]">
+            <option value="todos">Todos los Cultos</option>
+            <option value="11:00">Culto 11:00 hrs</option>
+            <option value="18:30">Culto 18:30 hrs</option>
+          </select>
+
+          <!-- Filtro Sector -->
+          <select id="filtroSector" onchange="filtrarRegistros()" class="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs sm:text-sm font-bold text-slate-700 outline-none focus:border-[#8b1e2d]">
+            <option value="todos">Todos los Sectores</option>
+            <script>
+              for(let i=1; i<=14; i++) {
+                document.write(`<option value="${i}">Sector ${i}</option>`);
+              }
+            </script>
+          </select>
+
+          <!-- Botón Exportar CSV -->
+          <button onclick="exportarCSV()" class="px-3 py-2 rounded-xl text-xs sm:text-sm font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 transition inline-flex items-center gap-1.5">
+            <svg class="w-4 h-4 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+            <span>CSV</span>
+          </button>
+
+          <!-- Botón Reset Total (Solo Admin) -->
+          <button id="btnResetTotal" onclick="resetAll()" class="hidden px-3 py-2 rounded-xl text-xs sm:text-sm font-bold text-white bg-red-600 hover:bg-red-700 transition inline-flex items-center gap-1.5 shadow-sm">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+            <span>Reset Total</span>
+          </button>
+        </div>
+
+      </div>
+
+      <!-- Resumen contador -->
+      <div class="flex items-center justify-between px-1 text-xs text-slate-500 font-semibold">
+        <span id="contadorRegistros">Cargando registros...</span>
+        <button onclick="cargarRegistros()" class="text-[#8b1e2d] font-bold hover:underline flex items-center gap-1">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+          Actualizar lista
+        </button>
+      </div>
+
+      <!-- Tabla de Registros -->
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-sm text-slate-700">
+            <thead class="bg-slate-50 border-b border-slate-200 text-xs uppercase font-extrabold text-slate-500 tracking-wider">
+              <tr>
+                <th class="py-3 px-4">Hermano(a)</th>
+                <th class="py-3 px-4">Teléfono</th>
+                <th class="py-3 px-4 text-center">Fila</th>
+                <th class="py-3 px-4">Sector / Mesón</th>
+                <th class="py-3 px-4 text-center">Culto</th>
+                <th id="thRegistrador" class="py-3 px-4 hidden">Captadora</th>
+                <th class="py-3 px-4 text-right">Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="tablaRegistros" class="divide-y divide-slate-100 font-medium">
+              <tr>
+                <td colspan="7" class="py-8 text-center text-slate-400">Cargando registros...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ======================================================== -->
+    <!-- PESTAÑA 2: DASHBOARD E INFORMES EJECUTIVOS -->
+    <!-- ======================================================== -->
+    <section id="tab-dashboard" class="hidden space-y-6">
+
+      <!-- Botón Imprimir / PDF -->
+      <div class="no-print flex justify-end">
+        <button onclick="window.print()" class="px-4 py-2 bg-slate-900 text-white rounded-xl text-xs sm:text-sm font-bold hover:bg-black transition inline-flex items-center gap-2 shadow-sm">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+          <span>Imprimir / Guardar Informe PDF</span>
+        </button>
+      </div>
+
+      <!-- Membrete Impresión -->
+      <div class="hidden print-only mb-6 border-b-2 border-slate-800 pb-4">
+        <div class="text-xs uppercase font-extrabold tracking-widest text-slate-500">INFORME EJECUTIVO · SERVICIO DE SANTA CENA</div>
+        <h1 class="text-3xl font-black text-slate-900 mt-1">Servicio de Santa Cena</h1>
+        <p class="text-sm italic text-slate-600 mt-1">«Así que, todas las veces que comiereis este pan, y bebiereis esta copa, la muerte del Señor anunciáis hasta que él venga.» (1 Corintios 11:26)</p>
+      </div>
+
+      <!-- 4 TARJETAS KPI -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        
+        <!-- KPI 1 -->
+        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+          <div class="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">Captación 11:00</div>
+          <div id="kpi-cap-11" class="text-3xl sm:text-4xl font-black text-slate-900 mt-1">0</div>
+          <div id="kpi-cap-11-sub" class="text-xs text-slate-400 font-semibold mt-1">0 captadoras · 0 sectores</div>
+        </div>
+
+        <!-- KPI 2 -->
+        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+          <div class="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">Captación 18:30</div>
+          <div id="kpi-cap-18" class="text-3xl sm:text-4xl font-black text-slate-900 mt-1">0</div>
+          <div id="kpi-cap-18-sub" class="text-xs text-slate-400 font-semibold mt-1">0 captadoras · 0 sectores</div>
+        </div>
+
+        <!-- KPI 3 -->
+        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+          <div class="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">Sectores centrales 11:00</div>
+          <div id="kpi-cen-11" class="text-3xl sm:text-4xl font-black text-[#8b1e2d] mt-1">0%</div>
+          <div class="text-xs text-slate-400 font-semibold mt-1">Sectores 5 · 7 · 9</div>
+        </div>
+
+        <!-- KPI 4 -->
+        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+          <div class="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">Sectores centrales 18:30</div>
+          <div id="kpi-cen-18" class="text-3xl sm:text-4xl font-black text-[#8b1e2d] mt-1">0%</div>
+          <div class="text-xs text-slate-400 font-semibold mt-1">Sectores 5 · 7 · 9</div>
+        </div>
+
+      </div>
+
+      <!-- Tarjeta informativa de Logística -->
+      <div class="bg-rose-50/60 border-l-4 border-[#8b1e2d] p-4 rounded-r-2xl shadow-sm text-sm text-slate-800">
+        <strong class="font-extrabold text-[#8b1e2d]">Logística en Vivo:</strong>
+        Las captadoras registran desde su dispositivo móvil y cada hermano recibe inmediatamente su WhatsApp con la fila, mesón y el mapa interactivo. Los sectores centrales (5, 7 y 9) se llenan primero.
+      </div>
+
+      <!-- GRÁFICO 1: CAPTACIÓN POR SECTOR Y CULTO -->
+      <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-100 gap-2">
+          <div>
+            <h3 class="text-sm font-extrabold text-slate-900 tracking-wider uppercase">Captación por Sector y Culto</h3>
+            <p class="text-xs text-slate-500 font-medium">Comparativa de hermanos asignados por sector (S1 - S14)</p>
+          </div>
+          <div class="flex items-center gap-4 text-xs font-bold">
+            <span class="inline-flex items-center gap-1.5">
+              <span class="w-3.5 h-3.5 rounded-md bg-[#8b1e2d]"></span> 11:00 hrs
+            </span>
+            <span class="inline-flex items-center gap-1.5">
+              <span class="w-3.5 h-3.5 rounded-md bg-[#e88d90]"></span> 18:30 hrs
+            </span>
+          </div>
+        </div>
+        <div class="mt-4 h-72 sm:h-80">
+          <canvas id="chartZonas"></canvas>
+        </div>
+      </div>
+
+      <!-- GRÁFICO 2: TOTAL POR CAPTADORA -->
+      <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-100 gap-2">
+          <div>
+            <h3 class="text-sm font-extrabold text-slate-900 tracking-wider uppercase">Total por Captadora</h3>
+            <p class="text-xs text-slate-500 font-medium">Hermanos registrados por cada servidora en ambos cultos</p>
+          </div>
+          <div class="flex items-center gap-4 text-xs font-bold">
+            <span class="inline-flex items-center gap-1.5">
+              <span class="w-3.5 h-3.5 rounded-md bg-[#8b1e2d]"></span> 11:00 hrs
+            </span>
+            <span class="inline-flex items-center gap-1.5">
+              <span class="w-3.5 h-3.5 rounded-md bg-[#e88d90]"></span> 18:30 hrs
+            </span>
+          </div>
+        </div>
+        <div class="mt-4 h-80 sm:h-96">
+          <canvas id="chartCaptadoras"></canvas>
+        </div>
+      </div>
+
+      <!-- SECCIÓN 3: PLANO ESQUEMÁTICO DE SECTORES (Distribución idéntica al mapa) -->
+      <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-100 gap-3">
+          <div>
+            <h3 class="text-sm font-extrabold text-slate-900 tracking-wider uppercase">Plano Esquemático de Sectores</h3>
+            <p class="text-xs text-slate-500 font-medium">Distribución física y ocupación en tiempo real (Sectores 1 al 14)</p>
+          </div>
+          <div class="no-print flex items-center bg-slate-100 p-1 rounded-xl text-xs font-extrabold text-slate-600">
+            <button onclick="setFiltroPlano('11:00')" id="btnPlano-11" class="px-3 py-1 rounded-lg bg-[#8b1e2d] text-white">11:00</button>
+            <button onclick="setFiltroPlano('18:30')" id="btnPlano-18" class="px-3 py-1 rounded-lg">18:30</button>
+            <button onclick="setFiltroPlano('ambos')" id="btnPlano-ambos" class="px-3 py-1 rounded-lg">Ambos</button>
+          </div>
+        </div>
+
+        <!-- Layout Gráfico del Templo (1:1 con el Mapa) -->
+        <div class="mt-6 max-w-4xl mx-auto bg-slate-50 p-4 sm:p-6 rounded-2xl border border-slate-200 space-y-4">
+          
+          <!-- PÚLPITO -->
+          <div class="w-56 mx-auto py-2 bg-slate-900 text-white text-center font-black text-xs uppercase tracking-widest rounded-xl shadow-md">
+            ✝ PÚLPITO
+          </div>
+
+          <!-- LÍNEA FRENTE: 5 SECTORES (11, 9, 7, 5, 1) -->
+          <div>
+            <div class="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-2 text-center">Frente · Cerca del Púlpito</div>
+            <div class="grid grid-cols-5 gap-2 sm:gap-3 text-center">
+              
+              <!-- Sector 11 (Sur) -->
+              <div id="plano-box-11" class="p-2 sm:p-3 rounded-xl border border-slate-200 bg-white shadow-sm flex flex-col justify-between h-24">
+                <div>
+                  <span class="text-[10px] sm:text-xs font-black text-slate-500 block">SECTOR 11</span>
+                  <span class="text-[9px] text-slate-400 font-semibold">F: 156-168</span>
+                </div>
+                <span id="plano-count-11" class="text-xl sm:text-2xl font-black text-slate-900">0</span>
+                <span id="plano-cap-11" class="text-[10px] text-slate-500 truncate font-semibold">—</span>
+              </div>
+
+              <!-- Sector 9 (Sur · Central) -->
+              <div id="plano-box-9" class="p-2 sm:p-3 rounded-xl border-2 border-[#8b1e2d] bg-rose-50 shadow-sm flex flex-col justify-between h-24">
+                <div>
+                  <span class="text-[10px] sm:text-xs font-black text-[#8b1e2d] block">SECTOR 9 ★</span>
+                  <span class="text-[9px] text-[#8b1e2d]/70 font-bold">F: 122-138</span>
+                </div>
+                <span id="plano-count-9" class="text-xl sm:text-2xl font-black text-[#8b1e2d]">0</span>
+                <span id="plano-cap-9" class="text-[10px] text-slate-600 truncate font-bold">—</span>
+              </div>
+
+              <!-- Sector 7 (Sur · Central) -->
+              <div id="plano-box-7" class="p-2 sm:p-3 rounded-xl border-2 border-[#8b1e2d] bg-rose-50 shadow-sm flex flex-col justify-between h-24">
+                <div>
+                  <span class="text-[10px] sm:text-xs font-black text-[#8b1e2d] block">SECTOR 7 ★</span>
+                  <span class="text-[9px] text-[#8b1e2d]/70 font-bold">F: 91-104</span>
+                </div>
+                <span id="plano-count-7" class="text-xl sm:text-2xl font-black text-[#8b1e2d]">0</span>
+                <span id="plano-cap-7" class="text-[10px] text-slate-600 truncate font-bold">—</span>
+              </div>
+
+              <!-- Sector 5 (Norte · Central) -->
+              <div id="plano-box-5" class="p-2 sm:p-3 rounded-xl border-2 border-[#8b1e2d] bg-rose-50 shadow-sm flex flex-col justify-between h-24">
+                <div>
+                  <span class="text-[10px] sm:text-xs font-black text-[#8b1e2d] block">SECTOR 5 ★</span>
+                  <span class="text-[9px] text-[#8b1e2d]/70 font-bold">F: 57-73</span>
+                </div>
+                <span id="plano-count-5" class="text-xl sm:text-2xl font-black text-[#8b1e2d]">0</span>
+                <span id="plano-cap-5" class="text-[10px] text-slate-600 truncate font-bold">—</span>
+              </div>
+
+              <!-- Sector 1 (Norte) -->
+              <div id="plano-box-1" class="p-2 sm:p-3 rounded-xl border border-slate-200 bg-white shadow-sm flex flex-col justify-between h-24">
+                <div>
+                  <span class="text-[10px] sm:text-xs font-black text-slate-500 block">SECTOR 1</span>
+                  <span class="text-[9px] text-slate-400 font-semibold">F: 1-13</span>
+                </div>
+                <span id="plano-count-1" class="text-xl sm:text-2xl font-black text-slate-900">0</span>
+                <span id="plano-cap-1" class="text-[10px] text-slate-500 truncate font-semibold">—</span>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- LÍNEA MEDIA: SECTOR 12 | MULTIMEDIA | SECTOR 2 -->
+          <div class="grid grid-cols-5 gap-2 sm:gap-3 text-center items-center">
+            
+            <!-- Sector 12 (Lateral Izq) -->
+            <div id="plano-box-12" class="p-2 sm:p-3 rounded-xl border border-slate-200 bg-white shadow-sm flex flex-col justify-between h-24">
+              <div>
+                <span class="text-[10px] sm:text-xs font-black text-slate-500 block">SECTOR 12</span>
+                <span class="text-[9px] text-slate-400 font-semibold">F: 169-187</span>
+              </div>
+              <span id="plano-count-12" class="text-xl sm:text-2xl font-black text-slate-900">0</span>
+              <span id="plano-cap-12" class="text-[10px] text-slate-500 truncate font-semibold">—</span>
+            </div>
+
+            <!-- MULTIMEDIA (Centro) -->
+            <div class="col-span-3 py-4 bg-slate-800 text-white rounded-xl flex flex-col items-center justify-center shadow-inner">
+              <span class="font-black text-xs sm:text-sm uppercase tracking-widest text-slate-200">MULTIMEDIA</span>
+              <span class="text-[10px] text-slate-400 font-medium">Control Central de Audio y Proyección</span>
+            </div>
+
+            <!-- Sector 2 (Lateral Der) -->
+            <div id="plano-box-2" class="p-2 sm:p-3 rounded-xl border border-slate-200 bg-white shadow-sm flex flex-col justify-between h-24">
+              <div>
+                <span class="text-[10px] sm:text-xs font-black text-slate-500 block">SECTOR 2</span>
+                <span class="text-[9px] text-slate-400 font-semibold">F: 14-28</span>
+              </div>
+              <span id="plano-count-2" class="text-xl sm:text-2xl font-black text-slate-900">0</span>
+              <span id="plano-cap-2" class="text-[10px] text-slate-500 truncate font-semibold">—</span>
+            </div>
+
+          </div>
+
+          <!-- GUÍA DEL PASILLO PRINCIPAL -->
+          <div class="relative py-2 flex items-center justify-center">
+            <div class="w-full border-t border-dashed border-slate-300"></div>
+            <span class="absolute bg-slate-50 px-3 text-[10px] font-black uppercase tracking-widest text-slate-400">Pasillo Principal</span>
+          </div>
+
+          <!-- LÍNEA FONDO (7 SECTORES: 14, 13, 10, 8, 6, 4, 3) -->
+          <div>
+            <div class="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-2 text-center">Fondo · Mesón de Entrada</div>
+            <div class="grid grid-cols-7 gap-1.5 sm:gap-2 text-center">
+              
+              <!-- Sector 14 -->
+              <div id="plano-box-14" class="p-2 rounded-xl bg-white border border-slate-200 shadow-sm flex flex-col justify-between h-22">
+                <span class="text-[10px] font-black text-slate-600">S14</span>
+                <span id="plano-count-14" class="text-base sm:text-lg font-black text-slate-900 my-0.5">0</span>
+                <span class="text-[8px] text-slate-400 font-bold truncate">199-215</span>
+              </div>
+
+              <!-- Sector 13 -->
+              <div id="plano-box-13" class="p-2 rounded-xl bg-white border border-slate-200 shadow-sm flex flex-col justify-between h-22">
+                <span class="text-[10px] font-black text-slate-600">S13</span>
+                <span id="plano-count-13" class="text-base sm:text-lg font-black text-slate-900 my-0.5">0</span>
+                <span class="text-[8px] text-slate-400 font-bold truncate">188-198</span>
+              </div>
+
+              <!-- Sector 10 -->
+              <div id="plano-box-10" class="p-2 rounded-xl bg-white border border-slate-200 shadow-sm flex flex-col justify-between h-22">
+                <span class="text-[10px] font-black text-slate-600">S10</span>
+                <span id="plano-count-10" class="text-base sm:text-lg font-black text-slate-900 my-0.5">0</span>
+                <span class="text-[8px] text-slate-400 font-bold truncate">139-155</span>
+              </div>
+
+              <!-- Sector 8 -->
+              <div id="plano-box-8" class="p-2 rounded-xl bg-white border border-slate-200 shadow-sm flex flex-col justify-between h-22">
+                <span class="text-[10px] font-black text-slate-600">S8</span>
+                <span id="plano-count-8" class="text-base sm:text-lg font-black text-slate-900 my-0.5">0</span>
+                <span class="text-[8px] text-slate-400 font-bold truncate">105-121</span>
+              </div>
+
+              <!-- Sector 6 -->
+              <div id="plano-box-6" class="p-2 rounded-xl bg-white border border-slate-200 shadow-sm flex flex-col justify-between h-22">
+                <span class="text-[10px] font-black text-slate-600">S6</span>
+                <span id="plano-count-6" class="text-base sm:text-lg font-black text-slate-900 my-0.5">0</span>
+                <span class="text-[8px] text-slate-400 font-bold truncate">74-90</span>
+              </div>
+
+              <!-- Sector 4 -->
+              <div id="plano-box-4" class="p-2 rounded-xl bg-white border border-slate-200 shadow-sm flex flex-col justify-between h-22">
+                <span class="text-[10px] font-black text-slate-600">S4</span>
+                <span id="plano-count-4" class="text-base sm:text-lg font-black text-slate-900 my-0.5">0</span>
+                <span class="text-[8px] text-slate-400 font-bold truncate">46-56</span>
+              </div>
+
+              <!-- Sector 3 -->
+              <div id="plano-box-3" class="p-2 rounded-xl bg-white border border-slate-200 shadow-sm flex flex-col justify-between h-22">
+                <span class="text-[10px] font-black text-slate-600">S3</span>
+                <span id="plano-count-3" class="text-base sm:text-lg font-black text-slate-900 my-0.5">0</span>
+                <span class="text-[8px] text-slate-400 font-bold truncate">29-45</span>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- ACCESO PRINCIPAL -->
+          <div class="text-center text-[11px] font-extrabold text-slate-400 uppercase tracking-widest pt-2">
+            ↑ ACCESO PRINCIPAL
+          </div>
+
+        </div>
+      </div>
+
+      <!-- SECCIÓN 4: TABLA DETALLE POR SECTOR -->
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="p-4 border-b border-slate-100 flex items-center justify-between">
+          <h3 class="text-sm font-extrabold text-slate-900 tracking-wider uppercase">Detalle por Sector y Captadora</h3>
+          <span class="text-xs text-slate-400 font-semibold">Sectores 1 al 14</span>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs sm:text-sm text-slate-700">
+            <thead class="bg-slate-50 border-b border-slate-200 font-extrabold text-slate-500 uppercase tracking-wider">
+              <tr>
+                <th class="py-2.5 px-3">Sector</th>
+                <th class="py-2.5 px-3">Filas</th>
+                <th class="py-2.5 px-3">11:00 Captadora</th>
+                <th class="py-2.5 px-3 text-center">11:00</th>
+                <th class="py-2.5 px-3">18:30 Captadora</th>
+                <th class="py-2.5 px-3 text-center">18:30</th>
+                <th class="py-2.5 px-3 text-right">Total</th>
+              </tr>
+            </thead>
+            <tbody id="tablaDetalleZonas" class="divide-y divide-slate-100 font-medium">
+              <!-- Renderizado dinámicamente -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ======================================================== -->
+    <!-- PESTAÑA 3: CONTEO & "NO CENARON" (CONTROL DE INSUMOS) -->
+    <!-- ======================================================== -->
+    <section id="tab-metricas" class="hidden space-y-6">
+
+      <!-- Resumen Comparativo General -->
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+          <span class="text-xs font-extrabold uppercase text-slate-400 tracking-wider">Asistencia Santa Cena</span>
+          <div id="card-asistencia-total" class="text-3xl font-black text-slate-900 mt-2">0</div>
+          <span id="card-asistencia-detalle" class="text-xs text-slate-500 font-medium">1ª: 0 · 2ª: 0</span>
+        </div>
+
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+          <span class="text-xs font-extrabold uppercase text-slate-400 tracking-wider">Conteo General</span>
+          <div id="card-conteo-total" class="text-3xl font-black text-slate-900 mt-2">0</div>
+          <span id="card-conteo-detalle" class="text-xs text-slate-500 font-medium">1ª: 0 · 2ª: 0</span>
+        </div>
+
+        <div class="bg-white p-5 rounded-2xl border-2 border-red-500 shadow-sm">
+          <span class="text-xs font-extrabold uppercase text-red-600 tracking-wider">No Cenaron (Sobrante)</span>
+          <div id="card-no-cenaron" class="text-3xl font-black text-red-600 mt-2">0</div>
+          <span class="text-xs text-red-500 font-medium">Personas sin servir en las filas</span>
+        </div>
+
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+          <span class="text-xs font-extrabold uppercase text-slate-400 tracking-wider">Diferencia Neta</span>
+          <div id="card-diferencia" class="text-3xl font-black text-[#8b1e2d] mt-2">0</div>
+          <span id="card-conciliacion-sub" class="text-xs text-slate-500 font-medium">Por conciliar</span>
+        </div>
+
+      </div>
+
+      <!-- Formulario de Ingreso de Métricas y Conciliación -->
+      <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+        <h3 class="text-base font-extrabold text-slate-900 mb-4 pb-2 border-b border-slate-100 flex items-center justify-between">
+          <span>Ingreso de Datos de Asistencia y Conciliación</span>
+          <span class="text-xs font-normal text-slate-400">Guarda los números para generar el informe mensual</span>
+        </h3>
+
+        <form id="formMetricas" onsubmit="guardarMetricas(event)" class="space-y-6">
+          
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            
+            <!-- Bloque 1: Asistencia y Conteo -->
+            <div class="space-y-4">
+              <h4 class="text-xs font-extrabold uppercase tracking-wider text-slate-500">1. Asistencia por Reunión</h4>
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-xs font-bold text-slate-700 mb-1">Santa Cena 1ª (11:00)</label>
+                  <input id="input_sc_11" type="number" class="w-full border rounded-xl px-3 py-2 text-sm font-bold text-slate-800" placeholder="Ej: 4636">
+                </div>
+                <div>
+                  <label class="block text-xs font-bold text-slate-700 mb-1">Santa Cena 2ª (18:30)</label>
+                  <input id="input_sc_18" type="number" class="w-full border rounded-xl px-3 py-2 text-sm font-bold text-slate-800" placeholder="Ej: 2369">
+                </div>
+              </div>
+
+              <h4 class="text-xs font-extrabold uppercase tracking-wider text-slate-500 pt-2">2. Conteo General</h4>
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-xs font-bold text-slate-700 mb-1">Conteo 1ª (11:00)</label>
+                  <input id="input_conteo_11" type="number" class="w-full border rounded-xl px-3 py-2 text-sm font-bold text-slate-800" placeholder="Ej: 4767">
+                </div>
+                <div>
+                  <label class="block text-xs font-bold text-slate-700 mb-1">Conteo 2ª (18:30)</label>
+                  <input id="input_conteo_18" type="number" class="w-full border rounded-xl px-3 py-2 text-sm font-bold text-slate-800" placeholder="Ej: 2164">
+                </div>
+              </div>
+
+              <div class="pt-2">
+                <label class="block text-xs font-bold text-red-600 mb-1">⚠️ Personas que "No Cenaron" (Insumos sin servir)</label>
+                <input id="input_no_cenaron" type="number" class="w-full border-2 border-red-300 rounded-xl px-3 py-2 text-sm font-black text-red-700 bg-red-50/50" placeholder="Ej: 14">
+              </div>
+            </div>
+
+            <!-- Bloque 2: Conciliación de Diferencias -->
+            <div class="space-y-4">
+              <h4 class="text-xs font-extrabold uppercase tracking-wider text-slate-500">3. Conciliación de Áreas</h4>
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-xs font-semibold text-slate-700 mb-1">UNT Kids AM</label>
+                  <input id="input_unt_am" type="number" class="w-full border rounded-xl px-3 py-2 text-sm font-semibold" placeholder="79">
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold text-slate-700 mb-1">UNT Kids PM</label>
+                  <input id="input_unt_pm" type="number" class="w-full border rounded-xl px-3 py-2 text-sm font-semibold" placeholder="18">
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold text-slate-700 mb-1">Kilo de amor</label>
+                  <input id="input_kilo" type="number" class="w-full border rounded-xl px-3 py-2 text-sm font-semibold" placeholder="18">
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold text-slate-700 mb-1">Cámaras AM</label>
+                  <input id="input_cam_am" type="number" class="w-full border rounded-xl px-3 py-2 text-sm font-semibold" placeholder="25">
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold text-slate-700 mb-1">Cámaras PM</label>
+                  <input id="input_cam_pm" type="number" class="w-full border rounded-xl px-3 py-2 text-sm font-semibold" placeholder="3">
+                </div>
+              </div>
+
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Observaciones / Motivos de "No Cenaron"</label>
+                <textarea id="input_observaciones" rows="2" class="w-full border rounded-xl p-3 text-xs text-slate-800" placeholder="Ej: 5 hermanos llegaron tarde a zona 6, 9 personas no alcanzaron a recibir bandeja en sector 12..."></textarea>
+              </div>
+            </div>
+
+          </div>
+
+          <div class="pt-4 border-t border-slate-100 flex justify-end">
+            <button type="submit" id="btnGuardarMetricas" class="px-6 py-2.5 bg-[#8b1e2d] text-white rounded-xl text-sm font-extrabold hover:bg-[#701824] shadow-md transition">
+              Guardar Métricas
+            </button>
+          </div>
+
+        </form>
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- ======================================================== -->
+  <!-- MODAL DE EDICIÓN RÁPIDA (NOMBRE, TELÉFONO, FILA, CULTO) -->
+  <!-- ======================================================== -->
+  <div id="modalEditar" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-md w-full shadow-2xl border border-slate-100 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+      
+      <!-- Cabecera del Modal -->
+      <div class="bg-slate-50 px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+        <div>
+          <h3 class="text-base font-black text-slate-900">Editar Registro</h3>
+          <p class="text-xs text-slate-500 font-medium">Corrige nombre, teléfono o ubicación</p>
+        </div>
+        <button onclick="cerrarModalEditar()" class="w-8 h-8 rounded-full bg-slate-200/80 hover:bg-slate-300 text-slate-600 flex items-center justify-center font-bold text-sm">✕</button>
+      </div>
+
+      <!-- Formulario de Edición -->
+      <form id="formEditar" onsubmit="guardarEdicion(event)" class="p-6 space-y-4">
+        <input type="hidden" id="edit_id">
+
+        <!-- Nombre -->
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">Nombre del Hermano</label>
+          <input id="edit_nombre" type="text" required class="w-full border rounded-xl px-4 py-2.5 text-sm font-bold text-slate-800 focus:border-[#8b1e2d] outline-none">
+        </div>
+
+        <!-- Teléfono -->
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">Teléfono WhatsApp</label>
+          <div class="relative">
+            <span class="absolute left-3.5 top-1/2 -translate-y-1/2 text-emerald-600 font-bold text-sm">📲</span>
+            <input id="edit_telefono" type="tel" required placeholder="56912345678" class="w-full border rounded-xl pl-10 pr-4 py-2.5 text-sm font-bold text-slate-800 focus:border-emerald-500 outline-none">
+          </div>
+          <span class="text-[11px] text-slate-400 mt-1 block">Si ingresaron mal el número, corrígelo aquí para actualizar contactos.</span>
+        </div>
+
+        <!-- Fila y Sector calculado -->
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">Fila Asignada</label>
+            <input id="edit_fila" type="number" required oninput="recalcularSectorModal(this.value)" class="w-full border rounded-xl px-4 py-2.5 text-sm font-black text-slate-900 focus:border-[#8b1e2d] outline-none">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">Sector</label>
+            <div id="edit_sector_display" class="border rounded-xl px-4 py-2.5 text-xs font-extrabold text-slate-700 bg-slate-50 flex items-center h-[42px]">
+              Sector —
+            </div>
+            <input type="hidden" id="edit_sector">
+          </div>
+        </div>
+
+        <!-- Culto -->
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">Culto / Reunión</label>
+          <div class="grid grid-cols-2 gap-2">
+            <label class="cursor-pointer border rounded-xl p-2.5 flex items-center justify-center gap-2 has-[:checked]:border-[#8b1e2d] has-[:checked]:bg-rose-50 text-xs font-bold">
+              <input type="radio" name="edit_culto" value="11:00" class="accent-[#8b1e2d]"> 11:00 hrs
+            </label>
+            <label class="cursor-pointer border rounded-xl p-2.5 flex items-center justify-center gap-2 has-[:checked]:border-[#8b1e2d] has-[:checked]:bg-rose-50 text-xs font-bold">
+              <input type="radio" name="edit_culto" value="18:30" class="accent-[#8b1e2d]"> 18:30 hrs
+            </label>
+          </div>
+        </div>
+
+        <!-- Botones de Acción -->
+        <div class="pt-4 flex flex-col gap-2">
+          <div class="flex gap-2">
+            <button type="button" onclick="cerrarModalEditar()" class="flex-1 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 transition">
+              Cancelar
+            </button>
+            <button type="submit" id="btnGuardarEdicion" class="flex-1 py-2.5 rounded-xl bg-[#8b1e2d] text-white text-xs font-black hover:bg-[#701824] shadow-md transition">
+              Guardar Cambios
+            </button>
+          </div>
+          
+          <button type="button" onclick="guardarYAbrirWhatsApp()" id="btnGuardarYWhatsApp" class="w-full py-2.5 rounded-xl bg-emerald-600 text-white text-xs font-black hover:bg-emerald-700 shadow-sm transition flex items-center justify-center gap-2">
+            <span>📲</span> Guardar y Reenviar WhatsApp
+          </button>
+        </div>
+
+      </form>
+    </div>
+  </div>
+
+  <!-- SCRIPT DE CONTROL PRINCIPAL -->
+  <script>
+    let registrosGlobales = [];
+    let statsGlobales = null;
+    let isAdminGlobal = false;
+    let planoCultoFiltro = '11:00';
+    let chartZonasInstance = null;
+    let chartCaptadorasInstance = null;
+
+    const RANGOS_SECTORES = [
+      { id: 1, s: 1, e: 13, meson: 'Mesón Norte' },
+      { id: 2, s: 14, e: 28, meson: 'Mesón Norte' },
+      { id: 3, s: 29, e: 45, meson: 'Mesón Entrada' },
+      { id: 4, s: 46, e: 56, meson: 'Mesón Entrada' },
+      { id: 5, s: 57, e: 73, meson: 'Mesón Norte' },
+      { id: 6, s: 74, e: 90, meson: 'Mesón Entrada' },
+      { id: 7, s: 91, e: 104, meson: 'Mesón Sur' },
+      { id: 8, s: 105, e: 121, meson: 'Mesón Entrada' },
+      { id: 9, s: 122, e: 138, meson: 'Mesón Sur' },
+      { id: 10, s: 139, e: 155, meson: 'Mesón Entrada' },
+      { id: 11, s: 156, e: 168, meson: 'Mesón Sur' },
+      { id: 12, s: 169, e: 187, meson: 'Mesón Sur' },
+      { id: 13, s: 188, e: 198, meson: 'Mesón Entrada' },
+      { id: 14, s: 199, e: 215, meson: 'Mesón Entrada' }
+    ];
+
+    function getAuthHeaders() {
+      const token = localStorage.getItem('accessToken');
+      if (!token) {
+        window.location.href = '/login';
+        throw new Error('Sesión no válida.');
+      }
+      return {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`
+      };
+    }
+
+    function cambiarTab(tab) {
+      if (!isAdminGlobal && (tab === 'dashboard' || tab === 'metricas')) {
+        alert('Este panel está reservado exclusivamente para la administración.');
+        return;
+      }
+
+      ['registros', 'dashboard', 'metricas'].forEach(t => {
+        const sec = document.getElementById(`tab-${t}`);
+        const btn = document.getElementById(`tabBtn-${t}`);
+        if (sec && btn) {
+          sec.classList.toggle('hidden', t !== tab);
+          btn.classList.toggle('active', t === tab);
+        }
+      });
+
+      if (tab === 'dashboard') {
+        cargarDashboard();
+      } else if (tab === 'metricas') {
+        cargarMetricasCulto();
+      }
+    }
+
+    // ==========================================
+    // 1. CARGA Y GESTIÓN DE REGISTROS
+    // ==========================================
+    async function cargarRegistros() {
+      try {
+        const res = await fetch('/registros/listar', { headers: getAuthHeaders() });
+        if (res.status === 401) {
+          cerrarSesion();
+          return;
+        }
+        const data = await res.json();
+        registrosGlobales = Array.isArray(data?.rows) ? data.rows : [];
+        isAdminGlobal = !!data?.is_admin;
+
+        // Mostrar u ocultar pestañas de dashboard y conteo según rol
+        const tabDash = document.getElementById('tabBtn-dashboard');
+        const tabMetr = document.getElementById('tabBtn-metricas');
+        if (tabDash) tabDash.classList.toggle('hidden', !isAdminGlobal);
+        if (tabMetr) tabMetr.classList.toggle('hidden', !isAdminGlobal);
+
+        // Nombre y títulos dinámicos
+        const userName = data?.current_user_name || 'Hermana Captadora';
+        const userBadge = document.getElementById('nombreUsuarioActivo');
+        if (userBadge) userBadge.textContent = userName;
+
+        const headerTitulo = document.getElementById('headerTitulo');
+        const headerSub = document.getElementById('headerSubtitulo');
+        if (isAdminGlobal) {
+          if (headerTitulo) headerTitulo.textContent = 'Panel General de Administración';
+          if (headerSub) headerSub.textContent = `Administrador: ${userName} · Control Total`;
+        } else {
+          if (headerTitulo) headerTitulo.textContent = 'Mis Registros';
+          if (headerSub) headerSub.textContent = `Captadora: ${userName} · Servicio en Vivo`;
+        }
+
+        // Mostrar elementos de admin
+        document.getElementById('btnResetTotal').classList.toggle('hidden', !isAdminGlobal);
+        document.getElementById('thRegistrador').classList.toggle('hidden', !isAdminGlobal);
+
+        filtrarRegistros();
+      } catch (e) {
+        console.error(e);
+        document.getElementById('tablaRegistros').innerHTML = `
+          <tr><td colspan="7" class="py-6 text-center text-red-500 font-bold">Error al cargar registros: ${e.message}</td></tr>
+        `;
+      }
+    }
+
+    function filtrarRegistros() {
+      const q = (document.getElementById('filtroBusqueda').value || '').toLowerCase().trim();
+      const culto = document.getElementById('filtroCulto').value;
+      const sector = document.getElementById('filtroSector').value;
+      const filtroFecha = document.getElementById('filtroFecha')?.value || 'todos';
+      
+      const hoyStr = new Date().toISOString().slice(0, 10);
+
+      const filtrados = registrosGlobales.filter(r => {
+        // Filtro Fecha (Histórico vs Hoy)
+        if (filtroFecha === 'hoy') {
+          const rFecha = (r.fecha || (r.created_at || '')).slice(0, 10);
+          if (rFecha !== hoyStr) return false;
+        }
+
+        // Filtro Culto
+        if (culto !== 'todos' && (r.culto || '11:00') !== culto) return false;
+
+        // Filtro Sector
+        if (sector !== 'todos' && String(r.sector) !== String(sector)) return false;
+
+        // Filtro Búsqueda
+        if (q) {
+          const matchNombre = (r.nombre || '').toLowerCase().includes(q);
+          const matchFila = String(r.fila || '').toLowerCase().includes(q);
+          const matchTel = String(r.telefono || '').toLowerCase().includes(q);
+          const matchCap = String(r.registrador_nombre || r.registrador_email || '').toLowerCase().includes(q);
+          if (!matchNombre && !matchFila && !matchTel && !matchCap) return false;
+        }
+        return true;
+      });
+
+      renderTablaRegistros(filtrados);
+    }
+
+    function normalizarTelefonoChileno(val) {
+      if (!val) return '';
+      let digits = String(val).replace(/\D/g, '');
+      if (!digits) return '';
+      if (digits.startsWith('569') && digits.length === 11) return digits;
+      if (digits.startsWith('9') && digits.length === 9) return '56' + digits;
+      if (digits.length === 8) return '569' + digits;
+      if (digits.startsWith('56') && digits.length === 11) return digits;
+      if (digits.startsWith('56') && digits.length === 10) return '569' + digits.slice(2);
+      if (digits.startsWith('569') && digits.length > 11) return digits.slice(0, 11);
+      if (digits.startsWith('9')) return ('56' + digits).slice(0, 11);
+      return digits;
+    }
+
+    function renderTablaRegistros(rows) {
+      const tbody = document.getElementById('tablaRegistros');
+      document.getElementById('contadorRegistros').textContent = `Mostrando ${rows.length} de ${registrosGlobales.length} hermanos registrados`;
+
+      if (!rows.length) {
+        tbody.innerHTML = `
+          <tr><td colspan="7" class="py-8 text-center text-slate-400 font-semibold italic">No se encontraron registros.</td></tr>
+        `;
+        return;
+      }
+
+      tbody.innerHTML = rows.map(r => {
+        const rawTel = r.telefono || '';
+        const tel = rawTel ? normalizarTelefonoChileno(rawTel) : '';
+        const telHtml = tel 
+          ? `<a href="https://wa.me/${tel}" target="_blank" class="text-emerald-700 font-bold hover:underline inline-flex items-center gap-1"><span>📲</span> ${tel}</a>`
+          : `<button onclick="abrirModalEditar('${r.id}')" class="text-amber-700 text-xs font-bold bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2 py-0.5 rounded-md inline-flex items-center gap-1 transition" title="Haz clic para agregar teléfono"><span>⚠️</span> Sin teléfono (Agregar)</button>`;
+
+        const cultoBadge = (r.culto === '18:30')
+          ? `<span class="px-2 py-0.5 rounded-md bg-[#e88d90]/30 text-[#8b1e2d] text-xs font-black">18:30</span>`
+          : `<span class="px-2 py-0.5 rounded-md bg-[#8b1e2d] text-white text-xs font-black">11:00</span>`;
+
+        const waBtn = r.url_whatsapp 
+          ? `<a href="${r.url_whatsapp}" target="_blank" class="p-1.5 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition inline-flex items-center" title="Abrir WhatsApp">📲</a>`
+          : '';
+
+        const nombreCaptadora = r.registrador_nombre || (r.registrador_email || '').split('@')[0] || 'Captadora';
+        const fechaStr = r.fecha ? `<div class="text-[10px] text-slate-400 font-medium">📅 ${r.fecha}</div>` : '';
+
+        return `
+          <tr class="hover:bg-slate-50/80 transition">
+            <td class="py-3 px-4">
+              <div class="font-bold text-slate-900">${r.nombre || '—'}</div>
+              ${fechaStr}
+            </td>
+            <td class="py-3 px-4">${telHtml}</td>
+            <td class="py-3 px-4 text-center">
+              <span class="inline-block px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800 font-black text-xs">#${r.fila || '—'}</span>
+            </td>
+            <td class="py-3 px-4">
+              <div class="font-bold text-slate-800">Sector ${r.sector || '—'}</div>
+              <div class="text-[11px] text-slate-400 font-medium">${r.mesa_label || 'Mesón'}</div>
+            </td>
+            <td class="py-3 px-4 text-center">${cultoBadge}</td>
+            ${isAdminGlobal ? `
+              <td class="py-3 px-4">
+                <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-50 border border-rose-200/60 text-[#8b1e2d] font-bold text-xs">
+                  <span>👩‍💼</span> ${nombreCaptadora}
+                </span>
+              </td>
+            ` : ''}
+            <td class="py-3 px-4 text-right">
+              <div class="inline-flex items-center gap-1.5">
+                ${waBtn}
+                <button onclick="abrirModalEditar('${r.id}')" class="p-1.5 rounded-lg bg-rose-50 text-[#8b1e2d] hover:bg-rose-100 transition" title="Editar Registro">✏️</button>
+                <button onclick="borrarRegistro('${r.id}')" class="p-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition" title="Eliminar">🗑️</button>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    // ==========================================
+    // 2. EDICIÓN RÁPIDA (MODAL)
+    // ==========================================
+    function recalcularSectorModal(fila) {
+      const f = parseInt(fila, 10);
+      const display = document.getElementById('edit_sector_display');
+      const inputSec = document.getElementById('edit_sector');
+      if (isNaN(f)) {
+        display.textContent = 'Sector —';
+        inputSec.value = '';
+        return;
+      }
+      const item = RANGOS_SECTORES.find(x => f >= x.s && f <= x.e);
+      if (item) {
+        display.textContent = `Sector ${item.id} (${item.meson})`;
+        inputSec.value = item.id;
+      } else {
+        display.textContent = 'Fuera de rango';
+        inputSec.value = '';
+      }
+    }
+
+    function abrirModalEditar(id) {
+      const reg = registrosGlobales.find(x => String(x.id) === String(id));
+      if (!reg) return;
+
+      document.getElementById('edit_id').value = reg.id;
+      document.getElementById('edit_nombre').value = reg.nombre || '';
+      document.getElementById('edit_telefono').value = reg.telefono || '';
+      document.getElementById('edit_fila').value = reg.fila || '';
+      
+      const cultoVal = reg.culto || '11:00';
+      const radios = document.getElementsByName('edit_culto');
+      radios.forEach(r => r.checked = (r.value === cultoVal));
+
+      recalcularSectorModal(reg.fila);
+      document.getElementById('modalEditar').classList.remove('hidden');
+    }
+
+    function cerrarModalEditar() {
+      document.getElementById('modalEditar').classList.add('hidden');
+    }
+
+    async function guardarEdicion(e, abrirWa = false) {
+      if (e) e.preventDefault();
+      const id = document.getElementById('edit_id').value;
+      const nombre = document.getElementById('edit_nombre').value.trim();
+      const rawTelefono = document.getElementById('edit_telefono').value.trim();
+      const telefono = normalizarTelefonoChileno(rawTelefono);
+      const fila = document.getElementById('edit_fila').value.trim();
+      const sector = document.getElementById('edit_sector').value;
+      const culto = Array.from(document.getElementsByName('edit_culto')).find(r => r.checked)?.value || '11:00';
+
+      const btn = document.getElementById('btnGuardarEdicion');
+      btn.disabled = true;
+      btn.textContent = 'Guardando...';
+
+      try {
+        const res = await fetch('/registros/editar', {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: JSON.stringify({ id, nombre, telefono, fila, sector, culto })
+        });
+        const data = await res.json();
+        if (!res.ok || data.status !== 'success') {
+          throw new Error(data.message || 'Error al actualizar registro');
+        }
+
+        // Actualizar en el estado local
+        const idx = registrosGlobales.findIndex(x => String(x.id) === String(id));
+        if (idx !== -1 && data.registro) {
+          registrosGlobales[idx] = { ...registrosGlobales[idx], ...data.registro, url_whatsapp: data.url_whatsapp };
+        }
+
+        cerrarModalEditar();
+        filtrarRegistros();
+
+        if (abrirWa && data.url_whatsapp) {
+          window.open(data.url_whatsapp, '_blank');
+        }
+      } catch (err) {
+        alert(err.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Guardar Cambios';
+      }
+    }
+
+    function guardarYAbrirWhatsApp() {
+      guardarEdicion(null, true);
+    }
+
+    async function borrarRegistro(id) {
+      if (!confirm('¿Seguro que deseas eliminar este registro?')) return;
+      try {
+        const endpoint = isAdminGlobal ? '/admin/borrar' : '/registros/borrar';
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: JSON.stringify({ id })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || 'No se pudo eliminar');
+        
+        registrosGlobales = registrosGlobales.filter(r => String(r.id) !== String(id));
+        filtrarRegistros();
+      } catch (e) {
+        alert(e.message);
+      }
+    }
+
+    async function resetAll() {
+      if (!isAdminGlobal) return;
+      if (!confirm('⚠️ ¿RESET TOTAL? Esta acción borrará TODOS los registros de Santa Cena.')) return;
+      try {
+        const res = await fetch('/admin/reset', { method: 'POST', headers: getAuthHeaders() });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || 'Error al resetear');
+        await cargarRegistros();
+      } catch (e) {
+        alert(e.message);
+      }
+    }
+
+    function exportarCSV() {
+      window.location.href = '/admin/export';
+    }
+
+    // ==========================================
+    // 3. DASHBOARD E INFORMES
+    // ==========================================
+    async function cargarDashboard() {
+      try {
+        const res = await fetch('/dashboard/stats', { headers: getAuthHeaders() });
+        const data = await res.json();
+        if (!res.ok || data.status !== 'success') throw new Error(data.message || 'Error al cargar stats');
+
+        statsGlobales = data;
+
+        // Renderizar KPIs
+        const r = data.resumen;
+        document.getElementById('kpi-cap-11').textContent = r.total_11;
+        document.getElementById('kpi-cap-11-sub').textContent = `${r.count_captadoras_11} captadoras · ${r.count_sectores_11 || r.count_zonas_11} sectores`;
+
+        document.getElementById('kpi-cap-18').textContent = r.total_18;
+        document.getElementById('kpi-cap-18-sub').textContent = `${r.count_captadoras_18} captadoras · ${r.count_sectores_18 || r.count_zonas_18} sectores`;
+
+        document.getElementById('kpi-cen-11').textContent = `${r.pct_centrales_11}%`;
+        document.getElementById('kpi-cen-18').textContent = `${r.pct_centrales_18}%`;
+
+        // Renderizar Gráficos
+        const sectoresData = data.sectores || data.zonas || [];
+        renderChartZonas(sectoresData);
+        renderChartCaptadoras(data.captadoras);
+
+        // Renderizar Plano y Tabla Detalle
+        renderPlanoEsquematico();
+        renderTablaDetalleZonas(sectoresData);
+
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    function renderChartZonas(zonas) {
+      const ctx = document.getElementById('chartZonas').getContext('2d');
+      if (chartZonasInstance) chartZonasInstance.destroy();
+
+      const labels = zonas.map(z => `S${z.sector || z.zona}`);
+      const data11 = zonas.map(z => z.c11);
+      const data18 = zonas.map(z => z.c18);
+
+      chartZonasInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [
+            { label: '11:00', data: data11, backgroundColor: '#8b1e2d', borderRadius: 4 },
+            { label: '18:30', data: data18, backgroundColor: '#e88d90', borderRadius: 4 }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            y: { beginAtZero: true, grid: { color: '#f1f5f9' } },
+            x: { grid: { display: false } }
+          }
+        }
+      });
+    }
+
+    function renderChartCaptadoras(captadoras) {
+      const ctx = document.getElementById('chartCaptadoras').getContext('2d');
+      if (chartCaptadorasInstance) chartCaptadorasInstance.destroy();
+
+      // Top captadoras
+      const top = captadoras.slice(0, 15);
+      const labels = top.map(c => c.nombre);
+      const data11 = top.map(c => c.c11);
+      const data18 = top.map(c => c.c18);
+
+      chartCaptadorasInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [
+            { label: '11:00', data: data11, backgroundColor: '#8b1e2d', borderRadius: 4 },
+            { label: '18:30', data: data18, backgroundColor: '#e88d90', borderRadius: 4 }
+          ]
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { stacked: true, beginAtZero: true, grid: { color: '#f1f5f9' } },
+            y: { stacked: true, grid: { display: false } }
+          }
+        }
+      });
+    }
+
+    function setFiltroPlano(culto) {
+      planoCultoFiltro = culto;
+      ['11', '18', 'ambos'].forEach(k => {
+        const btn = document.getElementById(`btnPlano-${k}`);
+        if (btn) {
+          const active = (k === '11' && culto === '11:00') || (k === '18' && culto === '18:30') || (k === 'ambos' && culto === 'ambos');
+          btn.className = active ? 'px-3 py-1 rounded-lg bg-[#8b1e2d] text-white' : 'px-3 py-1 rounded-lg text-slate-600 hover:bg-slate-200';
+        }
+      });
+      renderPlanoEsquematico();
+    }
+
+    function renderPlanoEsquematico() {
+      if (!statsGlobales) return;
+      const zonas = statsGlobales.zonas;
+
+      zonas.forEach(z => {
+        const countEl = document.getElementById(`plano-count-${z.zona}`);
+        const capEl = document.getElementById(`plano-cap-${z.zona}`);
+        
+        let count = 0;
+        let captadoras = [];
+        if (planoCultoFiltro === '11:00') {
+          count = z.c11;
+          captadoras = z.captadoras_11;
+        } else if (planoCultoFiltro === '18:30') {
+          count = z.c18;
+          captadoras = z.captadoras_18;
+        } else {
+          count = z.total;
+          captadoras = [...new Set([...z.captadoras_11, ...z.captadoras_18])];
+        }
+
+        if (countEl) countEl.textContent = count;
+        if (capEl) capEl.textContent = captadoras.length ? captadoras.join(', ') : '—';
+      });
+    }
+
+    function renderTablaDetalleZonas(zonas) {
+      const tbody = document.getElementById('tablaDetalleZonas');
+      tbody.innerHTML = zonas.map(z => {
+        const cap11 = z.captadoras_11.length ? z.captadoras_11.join(', ') : '—';
+        const cap18 = z.captadoras_18.length ? z.captadoras_18.join(', ') : '—';
+
+        return `
+          <tr class="hover:bg-slate-50 transition">
+            <td class="py-2.5 px-3 font-extrabold text-slate-900">Sector ${z.sector || z.zona}</td>
+            <td class="py-2.5 px-3 font-semibold text-slate-500">${z.filas}</td>
+            <td class="py-2.5 px-3 text-slate-700">${cap11}</td>
+            <td class="py-2.5 px-3 text-center font-bold">${z.c11}</td>
+            <td class="py-2.5 px-3 text-slate-700">${cap18}</td>
+            <td class="py-2.5 px-3 text-center font-bold">${z.c18}</td>
+            <td class="py-2.5 px-3 text-right font-black text-[#8b1e2d]">${z.total}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    // ==========================================
+    // 4. CONTEO & "NO CENARON" (MÉTRICAS)
+    // ==========================================
+    async function cargarMetricasCulto() {
+      try {
+        const res = await fetch('/admin/metricas_culto', { headers: getAuthHeaders() });
+        const data = await res.json();
+        const m = data?.metricas || {};
+
+        document.getElementById('input_sc_11').value = m.asistencia_11 || '';
+        document.getElementById('input_sc_18').value = m.asistencia_18 || '';
+        document.getElementById('input_conteo_11').value = m.conteo_11 || '';
+        document.getElementById('input_conteo_18').value = m.conteo_18 || '';
+        document.getElementById('input_no_cenaron').value = m.no_cenaron || '';
+        document.getElementById('input_unt_am').value = m.unt_kids_am || '';
+        document.getElementById('input_unt_pm').value = m.unt_kids_pm || '';
+        document.getElementById('input_kilo').value = m.kilo_amor || '';
+        document.getElementById('input_cam_am').value = m.camaras_am || '';
+        document.getElementById('input_cam_pm').value = m.camaras_pm || '';
+        document.getElementById('input_observaciones').value = m.observaciones || '';
+
+        // Actualizar tarjetas
+        const scTotal = (m.asistencia_11 || 0) + (m.asistencia_18 || 0);
+        const conteoTotal = (m.conteo_11 || 0) + (m.conteo_18 || 0);
+        const dif = conteoTotal - scTotal;
+
+        document.getElementById('card-asistencia-total').textContent = scTotal.toLocaleString('es-CL');
+        document.getElementById('card-asistencia-detalle').textContent = `1ª: ${m.asistencia_11 || 0} · 2ª: ${m.asistencia_18 || 0}`;
+
+        document.getElementById('card-conteo-total').textContent = conteoTotal.toLocaleString('es-CL');
+        document.getElementById('card-conteo-detalle').textContent = `1ª: ${m.conteo_11 || 0} · 2ª: ${m.conteo_18 || 0}`;
+
+        document.getElementById('card-no-cenaron').textContent = (m.no_cenaron || 0);
+        document.getElementById('card-diferencia').textContent = dif >= 0 ? `+${dif}` : `${dif}`;
+
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    async function guardarMetricas(e) {
+      e.preventDefault();
+      const payload = {
+        asistencia_11: document.getElementById('input_sc_11').value,
+        asistencia_18: document.getElementById('input_sc_18').value,
+        conteo_11: document.getElementById('input_conteo_11').value,
+        conteo_18: document.getElementById('input_conteo_18').value,
+        no_cenaron: document.getElementById('input_no_cenaron').value,
+        unt_kids_am: document.getElementById('input_unt_am').value,
+        unt_kids_pm: document.getElementById('input_unt_pm').value,
+        kilo_amor: document.getElementById('input_kilo').value,
+        camaras_am: document.getElementById('input_cam_am').value,
+        camaras_pm: document.getElementById('input_cam_pm').value,
+        observaciones: document.getElementById('input_observaciones').value
+      };
+
+      const btn = document.getElementById('btnGuardarMetricas');
+      btn.disabled = true;
+      btn.textContent = 'Guardando...';
+
+      try {
+        const res = await fetch('/admin/metricas_culto', {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || 'Error al guardar');
+        alert('✅ Métricas guardadas exitosamente.');
+        await cargarMetricasCulto();
+      } catch (err) {
+        alert(err.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Guardar Métricas';
+      }
+    }
+
+    function cerrarSesion() {
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
+      window.location.href = '/login';
+    }
+
+    // Inicializar al cargar
+    document.addEventListener('DOMContentLoaded', () => {
+      cargarRegistros();
+    });
+  </script>
+
+</body>
+</html>

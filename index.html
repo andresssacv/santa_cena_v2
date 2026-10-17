@@ -1,0 +1,1036 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Master Layout - Santa Cena 2026</title>
+    
+    <!-- Librerías -->
+    <script>
+        window.__libLoadErrors = [];
+        window.__onLibLoadError = function (libName) {
+            window.__libLoadErrors.push(libName);
+        };
+    </script>
+    <script src="https://cdn.tailwindcss.com" onerror="window.__onLibLoadError('tailwind')"></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" onerror="window.__onLibLoadError('react')"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" onerror="window.__onLibLoadError('react-dom')"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js" onerror="window.__onLibLoadError('babel')"></script>
+    
+    <!-- Fuente -->
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;800&display=swap" rel="stylesheet">
+    
+    <style>
+        body { font-family: 'Manrope', sans-serif; margin: 0; padding: 0; overflow: hidden; background-color: #f1f5f9; user-select: none; }
+        
+        .app-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            position: relative;
+            touch-action: auto; 
+        }
+
+        /* Contenedor del Canvas */
+        .scale-container {
+            transform-origin: center center;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.15);
+            transition: transform 0.3s ease-out;
+        }
+
+        @media (max-width: 767px) {
+            .scale-container { box-shadow: 0 10px 24px rgba(0,0,0,0.18); }
+        }
+
+        .capture-canvas {
+            width: 1280px;
+            height: 720px;
+            background-color: white;
+            position: relative;
+            overflow: hidden;
+            cursor: grab;
+            touch-action: none;
+        }
+        
+        .capture-canvas:active { cursor: grabbing; }
+
+        /* Capa del Mapa (Zoom y Pan) */
+        .map-layer {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            transition: transform 1s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+            transform-origin: 0 0;
+            will-change: transform;
+            touch-action: none;
+        }
+
+        /* Texturas y Estilos Visuales */
+        .seat-texture {
+            background-image: repeating-linear-gradient(
+                0deg, transparent, transparent 4px, rgba(0,0,0,0.03) 4px, rgba(0,0,0,0.03) 6px
+            );
+        }
+        .main-aisle-guide { border-top: 2px dashed rgba(99, 102, 241, 0.2); }
+
+        /* Animación de ruta */
+        .path-flow {
+            stroke-dasharray: 10;
+            animation: dash 30s linear infinite;
+        }
+        @keyframes dash { to { stroke-dashoffset: -1000; } }
+
+        /* Highlight para sectores activos */
+        .sector-active {
+            box-shadow: 0 0 0 4px #facc15, 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            z-index: 50 !important;
+        }
+        
+        /* Ocultar scrollbars en el panel */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body>
+        <script>
+        (function enforceLogin() {
+            const params = new URLSearchParams(window.location.search);
+            const esModoLectura = params.get('readOnly') === 'true';
+            const accessToken = localStorage.getItem('accessToken');
+            if (!esModoLectura && !accessToken) {
+                window.location.replace('/login');
+            }
+        })();
+    </script>
+
+    <div id="root"></div>
+
+    <script>
+        window.addEventListener('load', function () {
+            const root = document.getElementById('root');
+            const libsOk = !!(window.React && window.ReactDOM && window.Babel);
+
+            if (!libsOk || (window.__libLoadErrors && window.__libLoadErrors.length > 0)) {
+                const failed = (window.__libLoadErrors || []).join(', ') || 'react/react-dom/babel';
+                root.innerHTML = `
+                    <div style="max-width:760px;margin:40px auto;padding:20px;border-radius:12px;background:#fff;border:1px solid #e2e8f0;font-family:Arial,sans-serif;line-height:1.5;">
+                        <h2 style="margin-top:0;color:#b91c1c;">No se pudo cargar la interfaz</h2>
+                        <p>Fallo al cargar librerías del frontend (${failed}).</p>
+                        <p>En Render suele deberse a bloqueo temporal de CDN o política de red. Recarga la página y verifica conectividad saliente.</p>
+                        <p>Mientras tanto puedes usar <a href="/login">/login</a>, <a href="/mapa">/mapa</a> y <a href="/admin">/admin</a>.</p>
+                    </div>
+                `;
+            }
+        });
+    </script>
+
+    <script type="text/babel">
+        {% raw %} 
+        const { useState, useEffect, useRef, useMemo } = React;
+
+        /* =========================================
+           1. DATA Y CONSTANTES
+           ========================================= */
+ 
+        const TableIcon = ({ className }) => (
+            <svg className={className || "w-6 h-6"} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7h18v5H3z" /><path d="M5 12v7" /><path d="M19 12v7" /></svg>
+        );
+
+        // Estilos por defecto seguros (evitar errores si activeSector es null)
+        const DEFAULT_STYLE = { bg: 'bg-slate-100', border: 'border-slate-300', text: 'text-slate-500', badge: 'bg-slate-400', stroke: '#94a3b8', label: 'General' };
+
+        const getColor = (meson) => {
+            switch(meson) {
+                case 'norte': return { bg: 'bg-blue-100', border: 'border-blue-500', text: 'text-blue-900', badge: 'bg-blue-600', stroke: '#2563eb', label: 'Mesón Norte' };
+                case 'sur': return { bg: 'bg-emerald-100', border: 'border-emerald-500', text: 'text-emerald-900', badge: 'bg-emerald-600', stroke: '#059669', label: 'Mesón Sur' };
+                case 'entrada': return { bg: 'bg-amber-100', border: 'border-amber-500', text: 'text-amber-900', badge: 'bg-amber-500', stroke: '#d97706', label: 'Mesón Entrada' };
+                default: return DEFAULT_STYLE;
+            }
+        };
+
+        const ROUTES = {
+            1: [[{x: 96, y: 29}, {x: 96, y: 26}, {x: 72, y: 26}], [{x: 91, y: 29}, {x: 91, y: 40}, {x: 72, y: 40}]],
+            2: [[{x: 91, y: 48}, {x: 84, y: 52}, {x: 72, y: 52}], [{x: 91, y: 48}, {x: 84, y: 52}, {x: 78, y: 52}, {x: 78, y: 59}]],
+            5: [[{x: 96, y: 49}, {x: 96, y: 52}, {x: 71, y: 52}, {x: 71, y: 14}], [{x: 96, y: 49}, {x: 96, y: 61}, {x: 71, y: 61}, {x: 71, y: 52}]],
+            3: [[{x: 82, y: 88}, {x: 82, y: 65}]],
+            4: [[{x: 75, y: 88}, {x: 72, y: 89}, {x: 72, y: 65}]],
+            6: [[{x: 71, y: 88}, {x: 58, y: 88}, {x: 58, y: 65}]],
+            8: [[{x: 27, y: 95}, {x: 42, y: 95}, {x: 42, y: 65}]],
+            10: [[{x: 27, y: 87}, {x: 28, y: 86}, {x: 28, y: 65}]],
+            13: [[{x: 18, y: 87}, {x: 28, y: 87}, {x: 28, y: 65}]],
+            14: [[{x: 16, y: 94}, {x: 7, y: 94}, {x: 7, y: 65}]],
+            7: [[{x: 5, y: 68}, {x: 5, y: 62}, {x: 42, y: 62}, {x: 42, y: 14}]],
+            9: [[{x: 6, y: 74}, {x: 6, y: 62}, {x: 29, y: 62}, {x: 29, y: 14}]],
+            11: [[{x: 1, y: 74}, {x: 1, y: 26}, {x: 28, y: 26}], [{x: 1, y: 74}, {x: 1, y: 39}, {x: 28, y: 39}]],
+            12: [[{x: 1, y: 78}, {x: 1, y: 53}, {x: 28, y: 53}], [{x: 1, y: 78}, {x: 1, y: 62}, {x: 22, y: 61}, {x: 22, y: 52}]]
+        };
+
+        const SECTORS_CONFIG = [
+            { id: 1, label: '1', meson: 'norte', zona: 'Frente Der', pos: 'top-[14%] right-[12%]', w: 'w-[13%]', h: 'h-[24%]', cx: 81.5, cy: 26, rangeA: [1, 4], rangeB: [5, 13] },
+            { id: 2, label: '2', meson: 'norte', zona: 'Lateral Der', pos: 'top-[44%] right-[12%]', w: 'w-[13%]', h: 'h-[16%]', cx: 81.5, cy: 52, rangeA: [14, 22], rangeB: [23, 28] },
+            { id: 3, label: '3', meson: 'entrada', zona: 'Fondo Ext. Der', pos: 'bottom-[15%] right-[2%]', w: 'w-[10%]', h: 'h-[20%]', cx: 93, cy: 75, rangeA: [29, 36], rangeB: [37, 45] },
+            { id: 4, label: '4', meson: 'entrada', zona: 'Fondo Der', pos: 'bottom-[15%] right-[14%]', w: 'w-[10%]', h: 'h-[20%]', cx: 81, cy: 75, rangeA: [46, 51], rangeB: [51, 56] },
+            { id: 5, label: '5', meson: 'norte', zona: 'Frente Centro-Der', pos: 'top-[14%] right-[27%]', w: 'w-[13%]', h: 'h-[46%]', cx: 66.5, cy: 37, rangeA: [57, 66], rangeB: [68, 73], flexA: 'flex-[18]', flexB: 'flex-[28]' },
+            { id: 6, label: '6', meson: 'entrada', zona: 'Fondo C-Der', pos: 'bottom-[15%] right-[27%]', w: 'w-[13%]', h: 'h-[20%]', cx: 66.5, cy: 75, rangeA: [74, 81], rangeB: [82, 90] },
+            { id: 7, label: '7', meson: 'sur', zona: 'Frente Centro', pos: 'top-[14%] left-[50%] -translate-x-1/2', w: 'w-[16%]', h: 'h-[37%]', cx: 50, cy: 32.5, rangeA: [91, 100], rangeB: [101, 104] },
+            { id: 8, label: '8', meson: 'entrada', zona: 'Fondo Centro', pos: 'bottom-[15%] left-[50%] -translate-x-1/2', w: 'w-[16%]', h: 'h-[20%]', cx: 50, cy: 75, rangeA: [105, 112], rangeB: [113, 121] },
+            { id: 9, label: '9', meson: 'sur', zona: 'Frente Centro-Izq', pos: 'top-[14%] left-[27%]', w: 'w-[13%]', h: 'h-[46%]', cx: 33.5, cy: 37, rangeA: [122, 132], rangeB: [132, 138], flexA: 'flex-[18]', flexB: 'flex-[28]' },
+            { id: 10, label: '10', meson: 'entrada', zona: 'Fondo C-Izq', pos: 'bottom-[15%] left-[27%]', w: 'w-[13%]', h: 'h-[20%]', cx: 33.5, cy: 75, rangeA: [139, 146], rangeB: [147, 155] },
+            { id: 11, label: '11', meson: 'sur', zona: 'Frente Izq', pos: 'top-[14%] left-[12%]', w: 'w-[13%]', h: 'h-[24%]', cx: 18.5, cy: 26, rangeA: [156, 159], rangeB: [160, 168] },
+            { id: 12, label: '12', meson: 'sur', zona: 'Lateral Izq', pos: 'top-[44%] left-[12%]', w: 'w-[13%]', h: 'h-[16%]', cx: 18.5, cy: 52, rangeA: [169, 177], rangeB: [178, 187] },
+            { id: 13, label: '13', meson: 'entrada', zona: 'Fondo Izq', pos: 'bottom-[15%] left-[14%]', w: 'w-[10%]', h: 'h-[20%]', cx: 19, cy: 75, rangeA: [188, 192], rangeB: [194, 198] },
+            { id: 14, label: '14', meson: 'entrada', zona: 'Fondo Ext. Izq', pos: 'bottom-[15%] left-[2%]', w: 'w-[10%]', h: 'h-[20%]', cx: 7, cy: 75, rangeA: [199, 206], rangeB: [207, 215] }
+        ];
+
+        /* =========================================
+           2. COMPONENTE APP
+           ========================================= */
+
+        const App = () => {
+            const params = new URLSearchParams(window.location.search);
+            const filaDeUrl = params.get('fila');
+            const esModoLectura = params.get('readOnly') === 'true';
+        
+            const [selectedId, setSelectedId] = useState(null); // Usar useState directamente si desestructuraste arriba
+            const [trayNumber, setTrayNumber] = useState(filaDeUrl || ''); 
+            const [nombreHermano, setNombreHermano] = useState('');
+            const [telefono, setTelefono] = useState("");
+            const [mostrandoCampoTelefono, setMostrandoCampoTelefono] = useState(false);
+            const [nombreSugerencias, setNombreSugerencias] = useState([]);
+            const [mostrarListaSugerencias, setMostrarListaSugerencias] = useState(false);
+            const [cultoSeleccionado, setCultoSeleccionado] = useState(() => {
+                const h = new Date().getHours();
+                return h < 15 ? '11:00' : '18:30';
+            });
+            // Compatibilidad con código previo (evita ReferenceError por nombre antiguo).
+            const setSugerenciasNombre = setNombreSugerencias;
+            
+        
+            // UN SOLO REF
+            const containerRef = useRef(null);
+            const suggestAbortRef = useRef(null);
+        
+            // Corregir SECTORS -> SECTORS_CONFIG
+            useEffect(() => {
+                if (filaDeUrl) {
+                    const num = parseInt(filaDeUrl);
+                    const sectorEncontrado = SECTORS_CONFIG.find(s => 
+                        (num >= s.rangeA[0] && num <= s.rangeA[1]) || 
+                        (num >= s.rangeB[0] && num <= s.rangeB[1])
+                    );
+                    if (sectorEncontrado) setSelectedId(sectorEncontrado.id);
+                }
+            }, [filaDeUrl]);
+
+    // ... resto del código ...
+                    
+            // Estados de UI
+            const [showControls, setShowControls] = useState(true);
+           
+            // Estados del Mapa
+            const [scale, setScale] = useState(1);
+            const [viewTransform, setViewTransform] = useState({ x: 0, y: 0, k: window.innerWidth < 768 ? 1.06 : 1 });
+            const [isDragging, setIsDragging] = useState(false);
+            const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+            const [isAnimating, setIsAnimating] = useState(true);
+            
+            // Efecto para leer la fila desde la URL (ej: app.html?fila=67)
+            useEffect(() => {
+                const params = new URLSearchParams(window.location.search);
+                const filaUrl = params.get('fila');
+                if (filaUrl) {
+                    setTrayNumber(filaUrl);
+                    // El useEffect de activeData ya existente se encargará del resto
+                }
+            }, []);
+
+            useEffect(() => {
+                if (esModoLectura) return;
+
+                const q = (nombreHermano || '').trim();
+                if (q.length < 2) {
+                    if (suggestAbortRef.current) {
+                        suggestAbortRef.current.abort();
+                        suggestAbortRef.current = null;
+                    }
+                    setSugerenciasNombre([]);
+                    setMostrarListaSugerencias(false);
+                    return;
+                }
+
+                const accessToken = localStorage.getItem('accessToken');
+                if (!accessToken) return;
+
+                if (suggestAbortRef.current) {
+                    suggestAbortRef.current.abort();
+                }
+
+                const controller = new AbortController();
+                suggestAbortRef.current = controller;
+
+                const timer = setTimeout(async () => {
+                    try {
+                        const res = await fetch(`/contactos/sugerencias?q=${encodeURIComponent(q)}`, {
+                            headers: { 'Authorization': `Bearer ${accessToken}` },
+                            signal: controller.signal
+                        });
+                        if (!res.ok) return;
+                        const data = await res.json();
+                        const rows = Array.isArray(data?.rows) ? data.rows : [];
+                        setSugerenciasNombre(rows);
+                        setMostrarListaSugerencias(rows.length > 0);
+                    } catch (e) {
+                        if (e?.name !== 'AbortError') {
+                            setSugerenciasNombre([]);
+                            setMostrarListaSugerencias(false);
+                        }
+                    }
+                }, 150);
+
+                return () => {
+                    clearTimeout(timer);
+                    controller.abort();
+                };
+            }, [nombreHermano, esModoLectura]);
+
+            const capitalizeWords = (str) => {
+                if (!str) return '';
+                return str.replace(/(?:^|\s)\S/g, (char) => char.toUpperCase());
+            };
+
+            const normalizarTelefonoChileno = (val) => {
+                if (!val) return '';
+                let digits = String(val).replace(/\D/g, '');
+                if (!digits) return '';
+                if (digits.startsWith('569') && digits.length === 11) return digits;
+                if (digits.startsWith('9') && digits.length === 9) return '56' + digits;
+                if (digits.length === 8) return '569' + digits;
+                if (digits.startsWith('56') && digits.length === 11) return digits;
+                if (digits.startsWith('56') && digits.length === 10) return '569' + digits.slice(2);
+                if (digits.startsWith('569') && digits.length > 11) return digits.slice(0, 11);
+                if (digits.startsWith('9')) return ('56' + digits).slice(0, 11);
+                return digits;
+            };
+
+            const zoomIn = () => {
+                setIsAnimating(true);
+                setViewTransform(prev => clampTransform(prev.x, prev.y, Math.min(prev.k + 0.35, 2.8)));
+            };
+
+            const zoomOut = () => {
+                setIsAnimating(true);
+                setViewTransform(prev => clampTransform(prev.x, prev.y, Math.max(prev.k - 0.35, 0.65)));
+            };
+
+            const centerMap = () => {
+                setIsAnimating(true);
+                setViewTransform(clampTransform(0, 0, window.innerWidth < 768 ? 1.05 : 1));
+            };
+
+            const seleccionarSugerenciaNombre = (item) => {
+                setNombreHermano(capitalizeWords(item?.nombre || ''));
+                if (item?.telefono) {
+                    setTelefono(normalizarTelefonoChileno(item.telefono));
+                }
+                setMostrarListaSugerencias(false);
+            };
+        
+            const enviarAlBackend = async (telefonoSeleccionado = null) => {
+                const accessToken = localStorage.getItem('accessToken');
+                if (!accessToken) {
+                    alert('Debes iniciar sesión para registrar asignaciones.');
+                    return;
+                }
+
+                if (!nombreHermano?.trim()) {
+                    alert('Debes ingresar el nombre del hermano.');
+                    return;
+                }
+                if (!trayNumber?.toString().trim()) {
+                    alert('Debes ingresar la fila a asignar.');
+                    return;
+                }
+                if (!selectedId) {
+                    alert('Debes seleccionar un sector válido para la fila indicada.');
+                    return;
+                }
+
+                const telefonoRaw = telefonoSeleccionado || telefono;
+                const telefonoParaEnviar = normalizarTelefonoChileno(telefonoRaw);
+                const payload = { 
+                    nombre: capitalizeWords(nombreHermano.trim()), 
+                    fila: trayNumber, 
+                    sector: selectedId,
+                    telefono: telefonoParaEnviar,
+                    culto: cultoSeleccionado
+                };
+            
+                try {
+                    const response = await fetch('/enviar_asignacion', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${accessToken}`
+                        },
+                        body: JSON.stringify(payload)
+                    });
+                    
+                    const contentType = response.headers.get('content-type') || '';
+                    let data = null;
+                    let rawText = '';
+
+                    if (contentType.includes('application/json')) {
+                        data = await response.json();
+                    } else {
+                        rawText = await response.text();
+                    }
+
+                    if (response.status === 401) {
+                        localStorage.removeItem('accessToken');
+                        localStorage.removeItem('refreshToken');
+                        alert((data && data.message) || 'Sesión vencida o no autorizada. Inicia sesión nuevamente.');
+                        window.location.href = '/login';
+                        return;
+                    }
+
+                    if (!response.ok) {
+                        const backendMessage = (data && data.message) || rawText || `Error del servidor (HTTP ${response.status})`;
+                        throw new Error(backendMessage);
+                    }
+
+                    if (!data) {
+                        throw new Error('Respuesta inválida del servidor.');
+                    }
+            
+                    if (data.status === 'choose_phone') {
+                        const opciones = Array.isArray(data.options) ? data.options : [];
+                        if (!opciones.length) {
+                            alert('Hay duplicados por nombre, pero no se encontraron teléfonos válidos para seleccionar.');
+                            return;
+                        }
+
+                        const listado = opciones.map((tel, idx) => `${idx + 1}. ${tel}`).join('\n');
+                        const eleccion = window.prompt(
+                            `Se encontraron varias personas con ese nombre.\nSelecciona una opción escribiendo el número:\n\n${listado}`,
+                            '1'
+                        );
+
+                        if (eleccion === null) return;
+
+                        const indice = parseInt(eleccion, 10) - 1;
+                        if (Number.isNaN(indice) || indice < 0 || indice >= opciones.length) {
+                            alert('Opción inválida. Intente nuevamente.');
+                            return;
+                        }
+
+                        const telefonoElegido = opciones[indice];
+                        setTelefono(telefonoElegido);
+                        await enviarAlBackend(telefonoElegido);
+                    } else if (data.status === 'need_phone') {
+                        setMostrandoCampoTelefono(true);
+                        alert("Este hermano no está en la base de datos. Por favor, ingresa su teléfono para guardarlo.");
+                    } else if (data.status === 'success') {
+                        window.open(data.url_whatsapp, '_blank');
+                        // Limpiamos todo para el siguiente registro
+                        setNombreHermano("");
+                        setTrayNumber("");
+                        setTelefono("");
+                        setMostrandoCampoTelefono(false);
+                        setSugerenciasNombre([]);
+                        setMostrarListaSugerencias(false);
+                    } else {
+                        alert(data.message);
+                    }
+                } catch (e) {
+                    const msg = String(e?.message || '').toLowerCase();
+                    const esErrorRed = msg.includes('failed to fetch') || msg.includes('networkerror') || msg.includes('load failed') || msg.includes('network request failed');
+                    alert(esErrorRed
+                        ? 'No fue posible conectar con el servidor. Verifica tu conexión e inténtalo nuevamente.'
+                        : (e?.message || 'No se pudo registrar la asignación.'));
+                }
+            };
+            
+            // --- HASTA AQUÍ ---
+            
+            
+            // Lógica de búsqueda
+            const activeData = useMemo(() => {
+                const num = parseInt(trayNumber);
+                if (isNaN(num)) return null;
+
+                for (const sector of SECTORS_CONFIG) {
+                    const isSharedExplicit = (sector.id === 5 && num === 67) || (sector.id === 13 && num === 193) || (sector.id === 9 && num === 132); 
+                    const inA = (num >= sector.rangeA[0] && num <= sector.rangeA[1]);
+                    const inB = (num >= sector.rangeB[0] && num <= sector.rangeB[1]);
+                    const inBothRanges = inA && inB;
+
+                    if (inA || inB || isSharedExplicit) {
+                        let subLabel = "";
+                        let isShared = false;
+                        if (inBothRanges || isSharedExplicit) { isShared = true; subLabel = "A y B (Compartido)"; }
+                        else if (inA) { subLabel = "Frente (A)"; } 
+                        else { subLabel = "Fondo (B)"; }
+                        
+                        return { ...sector, tray: num, subLabel, isFront: inA || isSharedExplicit, isShared };
+                    }
+                }
+                return null;
+            }, [trayNumber]);
+
+            // EFECTO: Búsqueda -> Selección (SIN ZOOM AUTOMÁTICO)
+            useEffect(() => {
+                if (activeData) {
+                    setSelectedId(activeData.id);
+                    // IMPORTANTE: Aquí NO llamamos a ninguna función de zoom.
+                    // El usuario debe hacer click en "Acercar" si lo desea.
+                } else if (trayNumber === '') {
+                    // Si borra el número, podemos limpiar la selección o dejarla.
+                    // Para que sea "vista inicial", limpiamos si está vacío.
+                    setSelectedId(null);
+                }
+            }, [activeData, trayNumber]);
+
+            const activeSector = SECTORS_CONFIG.find(s => s.id === selectedId);
+            const activeStyle = activeSector ? getColor(activeSector.meson) : DEFAULT_STYLE;
+
+            // Escala Responsiva
+            useEffect(() => {
+                const handleResize = () => {
+                    if (containerRef.current) {
+                        const windowWidth = window.innerWidth;
+                        const windowHeight = window.innerHeight;
+                        const targetWidth = 1280;
+                        const targetHeight = 720;
+                        const scaleW = windowWidth / targetWidth;
+                        const scaleH = windowHeight / targetHeight;
+                        const isMobile = windowWidth < 768;
+                        const isTablet = windowWidth >= 768 && windowWidth < 1100;
+                        const baseScale = Math.min(scaleW, scaleH);
+                        const responsiveBoost = isMobile ? 3.2 : (isTablet ? 1.45 : 0.95);
+                        const maxScale = isMobile ? 1.35 : (isTablet ? 1.2 : 1.0);
+                        const newScale = Math.max(0.4, Math.min(baseScale * responsiveBoost, maxScale));
+                        setScale(newScale);
+                    }
+                };
+                window.addEventListener('resize', handleResize);
+                handleResize();
+                return () => window.removeEventListener('resize', handleResize);
+            }, []);
+
+            const clampTransform = (x, y, k) => {
+                const canvasW = 1280;
+                const canvasH = 720;
+                const scaledW = canvasW * k;
+                const scaledH = canvasH * k;
+
+                // Área realmente visible del canvas en coordenadas internas (clave para móvil)
+                const viewportW = Math.min(canvasW, window.innerWidth / Math.max(scale, 0.001));
+                const viewportH = Math.min(canvasH, window.innerHeight / Math.max(scale, 0.001));
+
+                const baseX = (canvasW - viewportW) / 2;
+                const baseY = (canvasH - viewportH) / 2;
+
+                let minX, maxX, minY, maxY;
+                if (scaledW <= viewportW) {
+                    const centeredX = baseX + ((viewportW - scaledW) / 2);
+                    minX = centeredX;
+                    maxX = centeredX;
+                } else {
+                    minX = baseX + viewportW - scaledW;
+                    maxX = baseX;
+                }
+
+                if (scaledH <= viewportH) {
+                    const centeredY = baseY + ((viewportH - scaledH) / 2);
+                    minY = centeredY;
+                    maxY = centeredY;
+                } else {
+                    minY = baseY + viewportH - scaledH;
+                    maxY = baseY;
+                }
+
+                const panSlackX = (canvasW - viewportW) / 2;
+                const panSlackY = (canvasH - viewportH) / 2;
+
+                return {
+                    x: Math.min(maxX + panSlackX, Math.max(minX - panSlackX, x)),
+                    y: Math.min(maxY + panSlackY, Math.max(minY - panSlackY, y)),
+                    k
+                };
+            };
+        
+            // Función manual de zoom
+            const performZoomToSector = (sector) => {
+                if (!sector) return;
+                setIsAnimating(true);
+                const canvasW = 1280;
+                const canvasH = 720;
+                const isMobile = window.innerWidth < 768;
+                const zoomLevel = esModoLectura ? (isMobile ? 1.06 : 1.03) : (isMobile ? 1.55 : (scale < 0.6 ? 1.9 : 1.55));
+                const targetX = (sector.cx / 100) * canvasW;
+                const targetY = (sector.cy / 100) * canvasH;
+                const x = 640 - (targetX * zoomLevel);
+                const y = 360 - (targetY * zoomLevel);
+                setViewTransform(clampTransform(x, y, zoomLevel));
+            };
+
+            // En links de visualización (fila en URL / readOnly), acercar automáticamente al sector asignado
+            useEffect(() => {
+                if (!activeData) return;
+                if (!(esModoLectura || filaDeUrl)) return;
+                const timer = setTimeout(() => performZoomToSector(activeData), 120);
+                return () => clearTimeout(timer);
+            }, [activeData, esModoLectura, filaDeUrl, scale]);
+
+            // Helpers de interacción
+            const handlePointerDown = (e) => {
+                if(e.target.closest('.control-panel')) return;
+                if (document.activeElement && document.activeElement.tagName === 'INPUT') document.activeElement.blur();
+                setIsAnimating(false);
+                setIsDragging(true);
+                if (e.pointerId !== undefined && e.currentTarget?.setPointerCapture) {
+                    e.currentTarget.setPointerCapture(e.pointerId);
+                }
+                setDragStart({ x: e.clientX, y: e.clientY });
+            };
+
+            const handlePointerMove = (e) => {
+                if (!isDragging) return;
+                e.preventDefault();
+                const dx = e.clientX - dragStart.x;
+                const dy = e.clientY - dragStart.y;
+                setViewTransform(prev => clampTransform(prev.x + (dx / scale), prev.y + (dy / scale), prev.k));
+                setDragStart({ x: e.clientX, y: e.clientY });
+            };
+
+            const handlePointerUp = (e) => {
+                if (e?.pointerId !== undefined && e.currentTarget?.releasePointerCapture) {
+                    try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (_) {}
+                }
+                setIsDragging(false);
+            };
+            
+            const resetZoom = (e) => {
+                e && e.stopPropagation();
+                setIsAnimating(true);
+                setViewTransform(clampTransform(0, 0, 1));
+                // Se ha mantenido la lógica de NO borrar la selección aquí
+            };
+
+            // Dibujo de rutas
+            const createRoundedPath = (points, width, height, radius = 20) => {
+                if (points.length < 2) return "";
+                const pxPoints = points.map(p => ({ x: (p.x / 100) * width, y: (p.y / 100) * height }));
+                let d = `M ${pxPoints[0].x} ${pxPoints[0].y}`;
+                for (let i = 1; i < pxPoints.length - 1; i++) {
+                    const p0 = pxPoints[i - 1]; const p1 = pxPoints[i]; const p2 = pxPoints[i + 1];
+                    const v1 = { x: p0.x - p1.x, y: p0.y - p1.y }; const len1 = Math.sqrt(v1.x*v1.x + v1.y*v1.y);
+                    const v2 = { x: p2.x - p1.x, y: p2.y - p1.y }; const len2 = Math.sqrt(v2.x*v2.x + v2.y*v2.y);
+                    const r = Math.min(radius, len1 / 2, len2 / 2);
+                    const startX = p1.x + (v1.x / len1) * r; const startY = p1.y + (v1.y / len1) * r;
+                    const endX = p1.x + (v2.x / len2) * r; const endY = p1.y + (v2.y / len2) * r;
+                    d += ` L ${startX} ${startY} Q ${p1.x} ${p1.y} ${endX} ${endY}`;
+                }
+                const last = pxPoints[pxPoints.length - 1];
+                d += ` L ${last.x} ${last.y}`;
+                return d;
+            }
+
+            const getPathsData = () => {
+                if (!selectedId) return [];
+                const rawRoutes = ROUTES[selectedId];
+                if (!rawRoutes) return [];
+                let paths = Array.isArray(rawRoutes[0]) ? rawRoutes : [rawRoutes];
+                return paths.map(pathPoints => createRoundedPath(pathPoints, 1280, 720));
+            };
+
+            return (
+                <div className="app-container bg-slate-100">
+                    
+                    {/* --- PANEL DE CONTROL (OPTIMIZADO PARA SMARTPHONES iOS Y ANDROID) --- */}
+                    {showControls && !new URLSearchParams(window.location.search).get('fila') && (
+                        <div className="control-panel fixed top-3 left-1/2 -translate-x-1/2 w-[94%] max-w-md bg-white/95 backdrop-blur-md p-3.5 sm:p-4 rounded-2xl shadow-2xl border border-slate-200 z-[100] flex flex-col gap-3 transition-all max-h-[88vh] overflow-y-auto no-scrollbar">                            
+                            
+                            {/* Cabecera Móvil Compacta */}
+                            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-7 h-7 rounded-lg bg-[#8b1e2d] text-white flex items-center justify-center font-black text-xs shadow-sm">✝</div>
+                                    <div>
+                                        <h2 className="text-xs font-black text-slate-900 tracking-tight leading-none">Santa Cena 2026</h2>
+                                        <div className="flex items-center gap-1 mt-0.5">
+                                            <button
+                                                type="button"
+                                                onClick={() => setCultoSeleccionado(cultoSeleccionado === '11:00' ? '18:30' : '11:00')}
+                                                className="text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-rose-50 text-[#8b1e2d] border border-rose-200/60 inline-flex items-center gap-1 active:scale-95 transition"
+                                                title="Cambiar culto"
+                                            >
+                                                {cultoSeleccionado === '11:00' ? '☀️ 11:00' : '🌙 18:30'} ⇄
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                    <a href="/admin" target="_blank" rel="noopener noreferrer" className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition flex items-center gap-1" title="Panel Admin">
+                                        📊 <span className="hidden sm:inline">Admin</span>
+                                    </a>
+                                    <button
+                                        onClick={() => { localStorage.removeItem('accessToken'); localStorage.removeItem('refreshToken'); window.location.href = '/login'; }}
+                                        className="p-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg text-xs font-bold transition"
+                                        title="Cerrar sesión"
+                                    >
+                                        🚪
+                                    </button>
+                                    <button 
+                                        onClick={() => setShowControls(false)} 
+                                        className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-xs font-bold transition"
+                                        title="Ocultar panel"
+                                    >
+                                        ✕
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Fila y Sector */}
+                            <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider mb-1 block">Fila a Asignar</label>
+                                    <div className="relative">
+                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8b1e2d] font-black text-sm">#</span>
+                                        <input 
+                                            type="number" 
+                                            inputMode="numeric"
+                                            enterKeyHint="next"
+                                            placeholder="Fila..." 
+                                            className="w-full pl-7 pr-2 py-2 bg-slate-50 border-2 border-slate-200 rounded-xl focus:border-[#8b1e2d] focus:bg-white outline-none text-base font-black text-slate-900 shadow-inner"
+                                            value={trayNumber}
+                                            onChange={(e) => setTrayNumber(e.target.value)}
+                                            onClick={(e) => e.target.select()}
+                                            onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+                                        />
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider mb-1 block">Sector del Mapa</label>
+                                    {selectedId ? (
+                                        <div className={`h-[42px] px-2 rounded-xl border-2 flex items-center justify-between shadow-sm transition-all ${activeStyle.bg} ${activeStyle.border}`}>
+                                            <div className="flex items-center gap-1 truncate">
+                                                <span className={`text-base font-black ${activeStyle.text}`}>S{selectedId}</span>
+                                                <span className="text-[9px] font-bold text-slate-600 leading-tight truncate">{activeStyle.label}</span>
+                                            </div>
+                                            <button 
+                                                type="button"
+                                                onClick={() => performZoomToSector(activeSector)}
+                                                className="bg-[#8b1e2d] text-white p-1 rounded-md text-[10px] font-black shadow-sm hover:bg-[#701824] flex-shrink-0"
+                                                title="Acercar sector"
+                                            >
+                                                🔍
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <div className="h-[42px] px-2 rounded-xl border-2 border-dashed border-slate-200 bg-slate-50 flex items-center justify-center text-xs text-slate-400 font-bold">
+                                            Ingresa fila...
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Selector Rápido de Sectores 1 al 14 */}
+                            <div>
+                                <div className="flex justify-between items-center mb-1">
+                                    <span className="text-[9px] text-slate-400 uppercase font-black tracking-wider">O selecciona sector manual:</span>
+                                    {activeData && <span className="text-[9px] text-[#8b1e2d] font-black">{activeData.subLabel}</span>}
+                                </div>
+                                <div className="flex gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+                                    {SECTORS_CONFIG.sort((a,b) => a.id - b.id).map(s => (
+                                        <button
+                                            key={s.id}
+                                            type="button"
+                                            onClick={(e) => { 
+                                                e.stopPropagation(); 
+                                                setSelectedId(s.id); 
+                                                setTrayNumber(''); 
+                                                performZoomToSector(s);
+                                            }}
+                                            className={`flex-shrink-0 w-7 h-7 sm:w-8 sm:h-8 rounded-lg font-black text-xs transition-all border
+                                                ${selectedId === s.id 
+                                                    ? 'bg-[#8b1e2d] text-white border-[#701824] shadow-md scale-105' 
+                                                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
+                                        >
+                                            {s.id}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {!esModoLectura ? (
+                                <div className="space-y-3 pt-1">
+                                    {/* Nombre con Auto-Capitalización */}
+                                    <div className="relative">
+                                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1 block">
+                                            Hermano(a) a Registrar
+                                        </label>
+                                        <div className="relative">
+                                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">👤</span>
+                                            <input 
+                                                type="text"
+                                                value={nombreHermano}
+                                                onChange={(e) => {
+                                                    const formatted = capitalizeWords(e.target.value);
+                                                    setNombreHermano(formatted);
+                                                    setMostrarListaSugerencias(true);
+                                                }}
+                                                onFocus={() => {
+                                                    if (nombreSugerencias.length) setMostrarListaSugerencias(true);
+                                                }}
+                                                onBlur={() => setTimeout(() => setMostrarListaSugerencias(false), 200)}
+                                                placeholder="Ej: Andres Acevedo"
+                                                className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border-2 border-slate-200 focus:border-[#8b1e2d] focus:bg-white rounded-xl outline-none font-bold text-slate-800 text-sm transition"
+                                            />
+                                        </div>
+
+                                        {mostrarListaSugerencias && nombreSugerencias.length > 0 && (
+                                            <div className="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-2xl max-h-44 overflow-y-auto divide-y divide-slate-100">
+                                                {nombreSugerencias.map((item, idx) => (
+                                                    <button
+                                                        key={`${item.nombre}-${item.telefono}-${idx}`}
+                                                        type="button"
+                                                        onMouseDown={(e) => e.preventDefault()}
+                                                        onClick={() => seleccionarSugerenciaNombre(item)}
+                                                        className="w-full text-left px-3 py-2 hover:bg-rose-50 flex items-center justify-between text-xs transition"
+                                                    >
+                                                        <span className="font-extrabold text-slate-800">{item.nombre}</span>
+                                                        <span className="font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">
+                                                            {item.telefono ? `📲 ${item.telefono}` : 'Sin teléfono'}
+                                                        </span>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Campo de Teléfono (Auto-normalizado a formato 569XXXXXXXX) */}
+                                    {mostrandoCampoTelefono && (
+                                        <div className="animate-in fade-in slide-in-from-top-1 duration-200 bg-rose-50/70 p-2.5 rounded-xl border border-rose-200">
+                                            <div className="flex items-center justify-between mb-1">
+                                                <label className="text-[10px] font-black text-[#8b1e2d] uppercase tracking-wider block">
+                                                    📲 Teléfono WhatsApp
+                                                </label>
+                                                <span className="text-[9px] font-bold text-slate-500">Auto-formato 569...</span>
+                                            </div>
+                                            <input 
+                                                type="tel"
+                                                inputMode="tel"
+                                                value={telefono}
+                                                onChange={(e) => setTelefono(e.target.value)}
+                                                onBlur={(e) => setTelefono(normalizarTelefonoChileno(e.target.value))}
+                                                placeholder="Ej: 56912345678"
+                                                className="w-full px-3 py-2 bg-white border-2 border-rose-300 focus:border-[#8b1e2d] rounded-lg outline-none font-bold text-slate-800 text-sm"
+                                                autoFocus
+                                            />
+                                            <span className="text-[10px] text-slate-500 mt-1 block">
+                                                Al salir se normaliza automáticamente a <strong>569XXXXXXXX</strong>.
+                                            </span>
+                                        </div>
+                                    )}
+
+                                    {/* Botón Principal de Envío */}
+                                    <button 
+                                        type="button"
+                                        onClick={() => enviarAlBackend()}
+                                        className="w-full bg-[#8b1e2d] hover:bg-[#701824] active:scale-[0.98] text-white font-black py-3 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 text-sm uppercase tracking-wide"
+                                    >
+                                        <span>📲</span> Registrar y Enviar WhatsApp
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="p-4 bg-[#8b1e2d] text-white rounded-xl shadow-lg text-center">
+                                    <p className="text-[10px] font-black uppercase tracking-widest opacity-80">Tu Ubicación Asignada</p>
+                                    <h2 className="text-4xl font-black italic my-1">FILA {trayNumber}</h2>
+                                    <p className="text-xs font-semibold opacity-90">Dirígete al sector resaltado en el mapa interactivo.</p>
+                                </div>
+                            )}
+
+                        </div>
+                    )}
+
+                    {/* Botón flotante para reabrir panel si fue ocultado */}
+                    {!showControls && (
+                        <button 
+                            onClick={() => setShowControls(true)} 
+                            className="fixed top-4 right-4 z-[100] bg-[#8b1e2d] text-white px-4 py-2.5 rounded-full shadow-2xl border border-white/20 text-xs font-black backdrop-blur-sm flex items-center gap-2 animate-bounce hover:bg-[#701824] transition"
+                        >
+                            <span>🔍</span> Registrar Hermano
+                        </button>
+                    )}
+
+                    {/* Controles Táctiles Flotantes de Navegación del Mapa (Para Celulares) */}
+                    <div className="fixed bottom-6 right-4 sm:right-6 z-[90] flex flex-col gap-2">
+                        <button
+                            type="button"
+                            onClick={zoomIn}
+                            className="w-11 h-11 rounded-2xl bg-white/95 text-slate-800 shadow-xl border border-slate-200 flex items-center justify-center font-black text-xl hover:bg-slate-50 active:scale-90 transition backdrop-blur-md"
+                            title="Acercar mapa"
+                        >
+                            ➕
+                        </button>
+                        <button
+                            type="button"
+                            onClick={zoomOut}
+                            className="w-11 h-11 rounded-2xl bg-white/95 text-slate-800 shadow-xl border border-slate-200 flex items-center justify-center font-black text-xl hover:bg-slate-50 active:scale-90 transition backdrop-blur-md"
+                            title="Alejar mapa"
+                        >
+                            ➖
+                        </button>
+                        <button
+                            type="button"
+                            onClick={centerMap}
+                            className="w-11 h-11 rounded-2xl bg-[#8b1e2d] text-white shadow-xl flex items-center justify-center font-black text-base hover:bg-[#701824] active:scale-90 transition"
+                            title="Centrar todo el templo"
+                        >
+                            🎯
+                        </button>
+                    </div>
+
+                    {/* --- CANVAS --- */}
+                    <div className="scale-container" style={{ transform: `scale(${scale})` }} ref={containerRef}>
+                        <div 
+                            className="capture-canvas"
+                            onPointerDown={handlePointerDown}
+                            onPointerMove={handlePointerMove}
+                            onPointerUp={handlePointerUp}
+                            onPointerCancel={handlePointerUp}
+                            onPointerLeave={handlePointerUp}
+                        >
+                            {/* Header flotante */}
+                            <div className="absolute top-6 left-8 z-[70] pointer-events-none opacity-80">
+                                <h1 className="text-3xl font-black text-slate-200 uppercase tracking-tighter opacity-50 mix-blend-multiply">Plano Santa Cena</h1>
+                            </div>
+
+                            {/* MAPA */}
+                            <div 
+                                className="map-layer" 
+                                style={{ 
+                                    transform: `translate(${viewTransform.x}px, ${viewTransform.y}px) scale(${viewTransform.k})`,
+                                    transition: isAnimating ? 'transform 1s cubic-bezier(0.25, 0.46, 0.45, 0.94)' : 'none'
+                                }}
+                            >
+                                {/* SVG Rutas */}
+                                <svg className="absolute inset-0 w-full h-full pointer-events-none z-[55]">
+                                    <defs>
+                                        <marker id="arrowhead" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+                                            <path d="M0,0 L0,6 L6,3 z" fill={activeStyle.stroke} />
+                                        </marker>
+                                        <marker id="startdot" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
+                                            <circle cx="3" cy="3" r="2.5" fill={activeStyle.stroke} />
+                                        </marker>
+                                    </defs>
+                                    {getPathsData().map((d, index) => (
+                                        <React.Fragment key={index}>
+                                            <path d={d} fill="none" stroke="white" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round" className="opacity-80 drop-shadow-sm" />
+                                            <path d={d} fill="none" stroke={activeStyle.stroke} strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="8,8" className="path-flow" markerStart="url(#startdot)" markerEnd="url(#arrowhead)" />
+                                        </React.Fragment>
+                                    ))}
+                                </svg>
+
+                                {/* Estructura Base */}
+                                <div className="absolute inset-0">
+                                    {/* Mesones */}
+                                    <div className={`absolute bottom-[15%] left-[2%] z-30 flex flex-col items-center justify-center h-[20%] transition-all duration-500 ${activeSector?.meson === 'sur' ? 'opacity-100 scale-110' : 'opacity-30 grayscale'}`}>
+                                        <div className="w-12 h-full bg-emerald-600 rounded-xl shadow-lg border-2 border-white flex items-center justify-center text-white mb-1"><TableIcon className="w-8 h-8" /></div>
+                                        <span className="text-[8px] font-black text-emerald-800 bg-white px-2 py-0.5 rounded shadow text-center">SUR</span>
+                                    </div>
+                                    <div className={`absolute top-[27%] right-[5%] z-30 flex flex-col items-center justify-center h-[25%] transition-all duration-500 ${activeSector?.meson === 'norte' ? 'opacity-100 scale-110' : 'opacity-30 grayscale'}`}>
+                                        <div className="w-12 h-full bg-blue-600 rounded-xl shadow-lg border-2 border-white flex items-center justify-center text-white mb-1"><TableIcon className="w-8 h-8" /></div>
+                                        <span className="text-[8px] font-black text-blue-800 bg-white px-2 py-0.5 rounded shadow text-center">NORTE</span>
+                                    </div>
+                                    <div className={`absolute bottom-[6%] left-1/2 -translate-x-1/2 w-[82%] z-30 flex justify-between transition-all duration-500 ${activeSector?.meson === 'entrada' ? 'opacity-100' : 'opacity-30 grayscale'}`}>
+                                        <div className="bg-amber-500 text-white rounded-t-xl w-[26%] py-2 flex items-center justify-center shadow-lg border-white border-2"><TableIcon className="w-6 h-6" /></div>
+                                        <div className="bg-amber-500 text-white rounded-t-xl w-[32%] py-2 flex items-center justify-center shadow-lg border-white border-2"><TableIcon className="w-6 h-6" /></div>
+                                    </div>
+
+                                    {/* Arquitectura */}
+                                    <div className="absolute top-0 bottom-0 left-[6%] right-[6%]">
+                                        <div className="absolute top-0 left-[15%] right-[15%] h-16 bg-slate-800 rounded-b-[3rem] z-10 border-b-4 border-slate-600 shadow-xl flex items-center justify-center"><span className="text-white/20 font-black text-2xl tracking-[1em] uppercase">Púlpito</span></div>
+                                        <div className="absolute top-[52%] left-1/2 -translate-x-1/2 w-[16%] h-[8%] bg-slate-700 rounded-b-xl z-20 border-x-4 border-b-4 border-slate-600 flex flex-col items-center justify-center"><span className="text-[9px] font-black text-white uppercase tracking-widest">Multimedia</span></div>
+                                        <div className="absolute top-[64%] left-4 right-4 h-px main-aisle-guide flex items-center justify-center opacity-50"><span className="bg-slate-50 px-2 text-[8px] font-black text-slate-400 uppercase tracking-[0.2em]">Pasillo Principal</span></div>
+                                        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 h-16 z-20 opacity-60 flex flex-col justify-end items-center">
+                                            <div className="animate-bounce mb-1"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="text-slate-400"><path d="M12 19V5" /><path d="M5 12l7-7 7 7" /></svg></div>
+                                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest bg-white/80 px-2 rounded">Acceso Principal</span>
+                                        </div>
+
+                                        {/* Sectores */}
+                                        {SECTORS_CONFIG.map(s => {
+                                            const isSelected = selectedId === s.id;
+                                            const st = isSelected ? getColor(s.meson) : DEFAULT_STYLE;
+                                            const containerClass = isSelected ? 'opacity-100 z-50 scale-105 sector-active' : (selectedId ? 'opacity-40 z-20 grayscale' : 'opacity-100 z-20');
+                                            
+                                            const growA = s.flexA || 'flex-1';
+                                            const growB = s.flexB || 'flex-1';
+                                            const labelPos = (s.id === 5 || s.id === 9) ? "top-[40%] -translate-y-1/2 w-full flex justify-center" : "inset-0 flex flex-col items-center justify-center";
+
+                                            const highlightA = isSelected && activeData && (activeData.isShared || activeData.isFront);
+                                            const highlightB = isSelected && activeData && (activeData.isShared || !activeData.isFront);
+
+                                            const minRow = s.rangeA[0];
+                                            const maxRow = s.rangeB[1];
+
+                                            return (
+                                                <div 
+                                                    key={s.id} 
+                                                    onClick={(e) => { 
+                                                        e.stopPropagation(); 
+                                                        if(selectedId !== s.id) {
+                                                            setSelectedId(s.id); 
+                                                            setTrayNumber(''); 
+                                                            performZoomToSector(s); // Click directo en mapa = Zoom
+                                                        }
+                                                    }}
+                                                    className={`absolute ${s.pos} ${s.w} ${s.h} flex flex-col transition-all duration-500 cursor-pointer ${containerClass}`}
+                                                >
+                                                    <div className={`${growA} rounded-t-lg border-2 seat-texture relative flex items-center justify-center transition-colors duration-300 ${highlightA ? 'bg-[#8b1e2d] border-rose-400 shadow-md ring-2 ring-[#8b1e2d]/40' : `${st.bg} ${st.border}`}`}>
+                                                        <span className={`text-[8px] font-bold uppercase opacity-60 ${highlightA ? 'text-white' : s.text}`}>{isSelected ? 'FRENTE' : 'A'}</span>
+                                                        {highlightA && <div className="absolute top-1 right-1 w-2 h-2 bg-yellow-400 rounded-full animate-pulse shadow-lg"></div>}
+                                                    </div>
+                                                    <div className="h-[6%] min-h-[2px] w-full flex items-center justify-center"><div className="w-full h-px bg-slate-300/30"></div></div>
+                                                    <div className={`${growB} rounded-b-lg border-2 seat-texture relative flex items-center justify-center transition-colors duration-300 ${highlightB ? 'bg-[#8b1e2d] border-rose-400 shadow-md ring-2 ring-[#8b1e2d]/40' : `${st.bg} ${st.border}`}`}>
+                                                        <span className={`text-[8px] font-bold uppercase opacity-60 ${highlightB ? 'text-white' : s.text}`}>{isSelected ? 'FONDO' : 'B'}</span>
+                                                        {highlightB && <div className="absolute bottom-1 right-1 w-2 h-2 bg-yellow-400 rounded-full animate-pulse shadow-lg"></div>}
+                                                    </div>
+                                                    
+                                                    {/* ETIQUETA SECTOR + RANGO FILAS */}
+                                                    <div className={`absolute pointer-events-none z-[60] ${labelPos}`}>
+                                                        <div className={`px-2 py-1.5 rounded-lg border flex flex-col items-center transition-all duration-300 ${isSelected ? 'bg-white shadow-lg border-slate-300 scale-125' : 'bg-white/60 border-slate-200/40 backdrop-blur-[2px]'}`}>
+                                                            <span className={`text-xl md:text-2xl font-black leading-none ${s.text}`}>{s.id}</span>
+                                                            <span className="text-[8px] md:text-[10px] font-extrabold text-slate-600 leading-none mt-1 whitespace-nowrap tracking-tight">
+                                                                Filas {minRow}-{maxRow}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div className="absolute bottom-4 right-6 z-40 opacity-40 pointer-events-none">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Sistema Santa Cena 2026</span>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+        {% endraw %}
+    </script>
+</body>
+</html>
+
+
+nl -ba app.py | sed -n '1,260p'

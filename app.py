@@ -7,6 +7,8 @@ import unicodedata
 import time
 import csv
 import io
+import re
+import datetime
 
 base_dir = os.path.dirname(os.path.abspath(__file__))
 template_dir = os.path.join(base_dir, 'templates')
@@ -200,6 +202,53 @@ def es_mismo_evento(created_at_str, target_fecha=None):
         return True
 
 
+def normalizar_telefono_chileno(raw_phone):
+    """
+    Normaliza cualquier entrada de teléfono chileno a formato estándar '569XXXXXXXX' (11 dígitos).
+    Maneja:
+    - +56912345678 -> 56912345678
+    - 56912345678  -> 56912345678
+    - 912345678    -> 56912345678 (antepone 56)
+    - +56 9 1234 5678 -> 56912345678
+    - 12345678     -> 56912345678 (antepone 569 si son 8 dígitos)
+    """
+    if not raw_phone:
+        return ""
+    digits = re.sub(r"\D", "", str(raw_phone).strip())
+    if not digits:
+        return ""
+    
+    # 1. Empieza con 569 y tiene 11 dígitos
+    if digits.startswith("569") and len(digits) == 11:
+        return digits
+    
+    # 2. Empieza con 9 y tiene 9 dígitos (formato móvil nacional 9XXXXXXXX)
+    if digits.startswith("9") and len(digits) == 9:
+        return f"56{digits}"
+    
+    # 3. Tiene 8 dígitos (ej: 12345678)
+    if len(digits) == 8:
+        return f"569{digits}"
+    
+    # 4. Empieza con 56 y tiene 11 dígitos
+    if digits.startswith("56") and len(digits) == 11:
+        return digits
+        
+    # 5. Empieza con 56 y tiene 10 dígitos (falta el 9)
+    if digits.startswith("56") and len(digits) == 10:
+        return f"569{digits[2:]}"
+        
+    # 6. Empieza con 569 y tiene más de 11 dígitos
+    if digits.startswith("569") and len(digits) > 11:
+        return digits[:11]
+        
+    # 7. Si tiene 9 dígitos
+    if len(digits) == 9:
+        return f"56{digits}"
+        
+    return digits
+
+
 def normalize_text(value):
     text = str(value or "").strip().lower()
     text = unicodedata.normalize("NFD", text)
@@ -216,7 +265,7 @@ def sort_registros_by_fila(rows):
     return sorted(rows or [], key=fila_sort_key)
 
 
-RANGOS_ZONAS = [
+RANGOS_SECTORES = [
     (1, 1, 13),
     (2, 14, 28),
     (3, 29, 45),
@@ -232,6 +281,7 @@ RANGOS_ZONAS = [
     (13, 188, 198),
     (14, 199, 215)
 ]
+RANGOS_ZONAS = RANGOS_SECTORES
 
 
 def obtener_sector_de_fila(fila):
@@ -239,17 +289,20 @@ def obtener_sector_de_fila(fila):
         f = int(str(fila).strip())
     except (TypeError, ValueError):
         return None
-    for sec_id, start, end in RANGOS_ZONAS:
+    for sec_id, start, end in RANGOS_SECTORES:
         if start <= f <= end:
             return str(sec_id)
     return None
 
 
-def obtener_rango_filas_zona(z):
-    for sec_id, start, end in RANGOS_ZONAS:
-        if sec_id == z:
+def obtener_rango_filas_sector(s):
+    for sec_id, start, end in RANGOS_SECTORES:
+        if sec_id == s:
             return f"{start}-{end}"
     return ""
+
+def obtener_rango_filas_zona(z):
+    return obtener_rango_filas_sector(z)
 
 
 def inferir_culto_actual():
@@ -317,7 +370,7 @@ def construir_whatsapp_link(host_url, nombre, fila, sector, telefono):
         f"Pincha aquí 👉 {link_visualizacion}"
     )
 
-    clean_phone = "".join(ch for ch in str(telefono or "") if ch.isdigit() or ch == "+")
+    clean_phone = normalizar_telefono_chileno(telefono)
     return f"https://wa.me/{clean_phone}?text={urllib.parse.quote(mensaje)}"
 
 
@@ -326,18 +379,25 @@ def actualizar_o_guardar_contacto(nuevo_nombre, nuevo_telefono, viejo_nombre=Non
     if not nuevo_nombre or not nuevo_telefono:
         return
     nombre_limpio = str(nuevo_nombre).strip()
-    tel_limpio = str(nuevo_telefono).strip()
+    tel_limpio = normalizar_telefono_chileno(nuevo_telefono)
     norm_nuevo = normalize_text(nombre_limpio)
     norm_viejo = normalize_text(viejo_nombre) if viejo_nombre else None
 
     try:
         encontrado_id = None
-        candidatos = supabase.table("contactos").select("id, nombre, telefono").limit(100).execute()
+        candidatos = supabase.table("contactos").select("id, nombre, telefono").ilike("nombre", f"%{nombre_limpio}%").limit(20).execute()
         for c in (candidatos.data or []):
             c_norm = normalize_text(c.get("nombre", ""))
             if c_norm == norm_nuevo or (norm_viejo and c_norm == norm_viejo):
                 encontrado_id = c.get("id")
                 break
+
+        if not encontrado_id and norm_viejo:
+            candidatos_v = supabase.table("contactos").select("id, nombre, telefono").ilike("nombre", f"%{str(viejo_nombre).strip()}%").limit(20).execute()
+            for c in (candidatos_v.data or []):
+                if normalize_text(c.get("nombre", "")) == norm_viejo:
+                    encontrado_id = c.get("id")
+                    break
 
         if encontrado_id:
             supabase.table("contactos").update({
@@ -570,7 +630,7 @@ def enviar_asignacion():
 
         # Caso 1: hay varios con el mismo nombre -> pedir selección por teléfono
         if len(candidatos) > 1:
-            telefonos_candidatos = sorted(set(str(c.get("telefono", "")).strip() for c in candidatos if c.get("telefono")))
+            telefonos_candidatos = sorted(set(normalizar_telefono_chileno(c.get("telefono", "")) for c in candidatos if c.get("telefono")))
 
             if not telefono_enviado:
                 return jsonify({
@@ -579,17 +639,18 @@ def enviar_asignacion():
                     "options": telefonos_candidatos
                 })
 
-            if telefono_enviado not in telefonos_candidatos:
+            telefono_enviado_norm = normalizar_telefono_chileno(telefono_enviado)
+            if telefono_enviado_norm not in telefonos_candidatos and telefono_enviado not in telefonos_candidatos:
                 return jsonify({
                     "status": "error",
                     "message": "El teléfono seleccionado no coincide con las opciones encontradas para ese nombre."
                 }), 400
 
-            telefono_destino = telefono_enviado
+            telefono_destino = telefono_enviado_norm or telefono_enviado
 
         # Caso 2: existe uno solo
         elif len(candidatos) == 1:
-            telefono_destino = str(candidatos[0].get("telefono", "")).strip()
+            telefono_destino = normalizar_telefono_chileno(candidatos[0].get("telefono", ""))
 
         # Caso 3: no existe en contactos -> pedir teléfono para crearlo
         if not telefono_destino:
@@ -599,9 +660,11 @@ def enviar_asignacion():
                     "message": "Hermano no encontrado. Ingrese teléfono."
                 })
 
-            telefono_destino = telefono_enviado
+            telefono_destino = normalizar_telefono_chileno(telefono_enviado)
 
             actualizar_o_guardar_contacto(nombre.strip(), telefono_destino)
+        else:
+            telefono_destino = normalizar_telefono_chileno(telefono_destino)
 
         # --- VALIDAR NOMBRE REPETIDO (EN EL MISMO CULTO Y EVENTO) ---
         query_nombre = (
@@ -720,11 +783,17 @@ def registros_listar():
     nombres_sin_tel = [r.get("nombre") for r in rows if not r.get("telefono") and r.get("nombre")]
     if nombres_sin_tel:
         try:
-            contactos_res = supabase.table("contactos").select("nombre, telefono").limit(500).execute()
-            tel_map = {
-                normalize_text(c.get("nombre", "")): str(c.get("telefono", "")).strip()
-                for c in (contactos_res.data or []) if c.get("telefono")
-            }
+            unique_nombres = list({str(n).strip() for n in nombres_sin_tel if n and str(n).strip()})
+            tel_map = {}
+            for i in range(0, len(unique_nombres), 30):
+                chunk = unique_nombres[i:i+30]
+                contactos_res = supabase.table("contactos").select("nombre, telefono").in_("nombre", chunk).execute()
+                for c in (contactos_res.data or []):
+                    c_tel = c.get("telefono")
+                    if c_tel:
+                        norm = normalize_text(c.get("nombre", ""))
+                        tel_map[norm] = normalizar_telefono_chileno(c_tel)
+
             for r in rows:
                 if not r.get("telefono"):
                     norm = normalize_text(r.get("nombre", ""))
@@ -740,8 +809,9 @@ def registros_listar():
         if not r.get("registrador_nombre"):
             r["registrador_nombre"] = obtener_nombre_captadora(r.get("registrador_email"))
         r["fecha"] = str(r.get("fecha_evento") or r.get("created_at") or "")[:10]
-        tel = r.get("telefono")
+        tel = normalizar_telefono_chileno(r.get("telefono"))
         if tel:
+            r["telefono"] = tel
             r["url_whatsapp"] = construir_whatsapp_link(
                 request.host_url, r.get("nombre", ""), r.get("fila", ""), r.get("sector", ""), tel
             )
@@ -781,7 +851,7 @@ def registros_editar():
         return jsonify({"status": "error", "message": "No tienes permiso para editar este registro"}), 403
 
     nuevo_nombre = (data.get("nombre") or reg.get("nombre") or "").strip()
-    nuevo_telefono = (data.get("telefono") or reg.get("telefono") or "").strip()
+    nuevo_telefono = normalizar_telefono_chileno(data.get("telefono") or reg.get("telefono") or "")
     nueva_fila = str(data.get("fila") if data.get("fila") is not None else reg.get("fila") or "").strip()
     nuevo_culto = (data.get("culto") or reg.get("culto") or "11:00").strip()
 
@@ -865,7 +935,7 @@ def contactos_editar():
 
     data = request.get_json(silent=True) or {}
     nombre = (data.get("nombre") or "").strip()
-    telefono = (data.get("telefono") or "").strip()
+    telefono = normalizar_telefono_chileno(data.get("telefono") or "")
     contacto_id = data.get("id")
 
     if not nombre or not telefono:
@@ -928,17 +998,18 @@ def dashboard_stats():
     res = supabase.table("registros_santa_cena").select("*").execute()
     rows = res.data or []
 
-    # Configuración de zonas 1 a 14
-    zonas_data = {
-        z: {
-            "zona": z,
-            "filas": obtener_rango_filas_zona(z),
+    # Configuración de sectores 1 a 14
+    sectores_data = {
+        s: {
+            "sector": s,
+            "zona": s,  # retrocompatibilidad
+            "filas": obtener_rango_filas_sector(s),
             "c11": 0,
             "c18": 0,
             "total": 0,
             "captadoras_11": set(),
             "captadoras_18": set()
-        } for z in range(1, 15)
+        } for s in range(1, 15)
     }
 
     captadoras_map = {}
@@ -974,28 +1045,28 @@ def dashboard_stats():
             if sector_num in [5, 7, 9]:
                 centrales_11 += 1
             if 1 <= sector_num <= 14:
-                zonas_data[sector_num]["c11"] += 1
-                zonas_data[sector_num]["captadoras_11"].add(nombre_captadora)
+                sectores_data[sector_num]["c11"] += 1
+                sectores_data[sector_num]["captadoras_11"].add(nombre_captadora)
         else:
             total_18 += 1
             captadoras_map[nombre_captadora]["c18"] += 1
             if sector_num in [5, 7, 9]:
                 centrales_18 += 1
             if 1 <= sector_num <= 14:
-                zonas_data[sector_num]["c18"] += 1
-                zonas_data[sector_num]["captadoras_18"].add(nombre_captadora)
+                sectores_data[sector_num]["c18"] += 1
+                sectores_data[sector_num]["captadoras_18"].add(nombre_captadora)
 
         if 1 <= sector_num <= 14:
-            zonas_data[sector_num]["total"] += 1
+            sectores_data[sector_num]["total"] += 1
 
         captadoras_map[nombre_captadora]["total"] += 1
 
-    zonas_list = []
-    for z in range(1, 15):
-        item = zonas_data[z]
+    sectores_list = []
+    for s in range(1, 15):
+        item = sectores_data[s]
         item["captadoras_11"] = sorted(list(item["captadoras_11"]))
         item["captadoras_18"] = sorted(list(item["captadoras_18"]))
-        zonas_list.append(item)
+        sectores_list.append(item)
 
     captadoras_list = sorted(captadoras_map.values(), key=lambda x: x["total"], reverse=True)
 
@@ -1005,8 +1076,8 @@ def dashboard_stats():
     count_captadoras_11 = sum(1 for c in captadoras_list if c["c11"] > 0)
     count_captadoras_18 = sum(1 for c in captadoras_list if c["c18"] > 0)
 
-    count_zonas_11 = sum(1 for z in zonas_list if z["c11"] > 0)
-    count_zonas_18 = sum(1 for z in zonas_list if z["c18"] > 0)
+    count_sectores_11 = sum(1 for s in sectores_list if s["c11"] > 0)
+    count_sectores_18 = sum(1 for s in sectores_list if s["c18"] > 0)
 
     # Cargar métricas reales (por defecto 0 si no se han guardado aún)
     metricas = {
@@ -1039,10 +1110,13 @@ def dashboard_stats():
             "pct_centrales_18": pct_centrales_18,
             "count_captadoras_11": count_captadoras_11,
             "count_captadoras_18": count_captadoras_18,
-            "count_zonas_11": count_zonas_11,
-            "count_zonas_18": count_zonas_18,
+            "count_sectores_11": count_sectores_11,
+            "count_sectores_18": count_sectores_18,
+            "count_zonas_11": count_sectores_11,
+            "count_zonas_18": count_sectores_18,
         },
-        "zonas": zonas_list,
+        "sectores": sectores_list,
+        "zonas": sectores_list,
         "captadoras": captadoras_list,
         "metricas": metricas
     })
