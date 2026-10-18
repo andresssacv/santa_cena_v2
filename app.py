@@ -9,6 +9,7 @@ import csv
 import io
 import re
 import datetime
+import json
 
 base_dir = os.path.dirname(os.path.abspath(__file__))
 template_dir = os.path.join(base_dir, 'templates')
@@ -182,21 +183,24 @@ def obtener_nombre_captadora(user_or_email, user_obj=None):
 
 
 def obtener_fecha_hoy():
-    """Retorna la fecha actual en formato YYYY-MM-DD."""
+    """Retorna la fecha actual en Chile (UTC-3) en formato YYYY-MM-DD."""
     import datetime
-    return datetime.date.today().isoformat()
+    try:
+        tz_chile = datetime.timezone(datetime.timedelta(hours=-3))
+        return datetime.datetime.now(tz_chile).date().isoformat()
+    except Exception:
+        return datetime.date.today().isoformat()
 
 
 def es_mismo_evento(created_at_str, target_fecha=None):
-    """Verifica si un timestamp corresponde al evento/fecha objetivo (por defecto hoy)."""
+    """Verifica si un timestamp corresponde al evento/fecha objetivo (por defecto hoy en Chile)."""
     if not created_at_str:
         return True
     try:
         fecha_str = str(created_at_str)[:10]
-        import datetime
         if target_fecha:
             return fecha_str == str(target_fecha)[:10]
-        hoy = datetime.date.today().isoformat()
+        hoy = obtener_fecha_hoy()
         return fecha_str == hoy
     except Exception:
         return True
@@ -293,6 +297,36 @@ def obtener_sector_de_fila(fila):
         if start <= f <= end:
             return str(sec_id)
     return None
+
+
+def sector_fila_sort_key(registro):
+    """
+    Clave de ordenamiento:
+    1. Sector numérico (Sector 1, Sector 2, ..., Sector 14).
+    2. Fila numérica ascendente.
+    """
+    r = registro or {}
+    sec = r.get("sector")
+    if not sec or str(sec).strip() == "" or str(sec).strip().lower() in ("none", "null"):
+        sec = obtener_sector_de_fila(r.get("fila"))
+    try:
+        sec_num = int(str(sec).replace("Sector", "").replace("sector", "").strip())
+        sec_key = (0, sec_num)
+    except (ValueError, TypeError):
+        sec_key = (1, str(sec or "").lower())
+
+    fila = str(r.get("fila") or "").strip()
+    if fila.isdigit():
+        fila_key = (0, int(fila), fila)
+    else:
+        fila_key = (1, fila.lower(), fila)
+
+    return (sec_key, fila_key)
+
+
+def sort_registros_by_sector_then_fila(rows):
+    """Ordena los registros por Sector (1 al 14) y luego por Fila."""
+    return sorted(rows or [], key=sector_fila_sort_key)
 
 
 def obtener_rango_filas_sector(s):
@@ -758,7 +792,13 @@ def mis_registros():
         .order("created_at", desc=True) \
         .execute()
 
-    return jsonify(sort_registros_by_fila(res.data))
+    rows = res.data or []
+    # Las captadoras solo ven sus registros de hoy
+    if not require_admin(user):
+        hoy = obtener_fecha_hoy()
+        rows = [r for r in rows if es_mismo_evento(r.get("fecha_evento") or r.get("created_at"), hoy)]
+
+    return jsonify(sort_registros_by_sector_then_fila(rows))
 
 
 @app.route('/registros/listar')
@@ -778,6 +818,13 @@ def registros_listar():
 
     res = query.execute()
     rows = res.data or []
+
+    # SEGURIDAD Y PRIVACIDAD PARA HERMANAS CAPTADORAS:
+    # Si no es administrador, solo ve lo que ella anotó durante el día de hoy.
+    # El histórico completo mensual y de todos los hermanos está reservado para los administradores (Juan y Andrés Acevedo).
+    if not is_admin:
+        hoy = obtener_fecha_hoy()
+        rows = [r for r in rows if es_mismo_evento(r.get("fecha_evento") or r.get("created_at"), hoy)]
 
     # Enriquecer registros que no tengan teléfono consultando la tabla de contactos
     nombres_sin_tel = [r.get("nombre") for r in rows if not r.get("telefono") and r.get("nombre")]
@@ -818,7 +865,7 @@ def registros_listar():
         r["mesa_label"] = obtener_mesa_label(r.get("sector"))
 
     return jsonify({
-        "rows": sort_registros_by_fila(rows),
+        "rows": sort_registros_by_sector_then_fila(rows),
         "is_admin": is_admin,
         "current_user_email": user.email,
         "current_user_name": obtener_nombre_captadora(user.email, user)
@@ -1124,7 +1171,7 @@ def dashboard_stats():
 
 @app.route('/admin/metricas_culto', methods=['GET', 'POST'])
 def admin_metricas_culto():
-    """Obtiene o actualiza las métricas de asistencia, conteo y no cenaron para el Administrador."""
+    """Obtiene o actualiza las métricas de asistencia, conteo, no cenaron y planilla completa tipo Excel para Administradores."""
     supabase_error = require_supabase()
     if supabase_error:
         return supabase_error
@@ -1133,28 +1180,49 @@ def admin_metricas_culto():
     if err:
         return err, code
 
-    # SEGURIDAD: Solo Administrador (Juan Acevedo)
+    # SEGURIDAD: Solo Administradores (Juan y Andrés Acevedo)
     if not require_admin(user):
-        return jsonify({"status": "error", "message": "Acceso restringido solo al administrador (Juan Acevedo)"}), 403
+        return jsonify({"status": "error", "message": "Acceso restringido solo a los administradores (Juan y Andrés Acevedo)"}), 403
 
     if request.method == 'GET':
         defaults = {
-            "asistencia_11": 0, "asistencia_18": 0,
-            "conteo_11": 0, "conteo_18": 0,
-            "no_cenaron": 0,
-            "unt_kids_am": 0, "unt_kids_pm": 0,
-            "kilo_amor": 0, "camaras_am": 0, "camaras_pm": 0,
-            "observaciones": ""
+            "asistencia_11": 4636, "asistencia_18": 2369,
+            "conteo_11": 4767, "conteo_18": 2164,
+            "no_cenaron": 14,
+            "unt_kids_am": 79, "unt_kids_pm": 18,
+            "kilo_amor": 18, "camaras_am": 25, "camaras_pm": 3,
+            "observaciones": "",
+            "excel_data": None
         }
         try:
             res = supabase.table("metricas_culto").select("*").order("updated_at", desc=True).limit(1).execute()
             if res.data:
-                defaults.update(res.data[0])
+                row = dict(res.data[0])
+                obs_raw = str(row.get("observaciones") or "").strip()
+                if obs_raw.startswith('{"__excel_v2":'):
+                    try:
+                        parsed = json.loads(obs_raw)
+                        row["observaciones"] = parsed.get("notas", "")
+                        row["excel_data"] = parsed.get("excel_data")
+                    except Exception:
+                        pass
+                defaults.update(row)
         except Exception:
             pass
         return jsonify({"status": "success", "metricas": defaults})
 
     data = request.get_json(silent=True) or {}
+    notas_str = str(data.get("observaciones") or "").strip()
+    excel_data = data.get("excel_data")
+
+    obs_to_save = notas_str
+    if excel_data is not None:
+        obs_to_save = json.dumps({
+            "__excel_v2": True,
+            "notas": notas_str,
+            "excel_data": excel_data
+        }, ensure_ascii=False)
+
     payload = {
         "asistencia_11": int(data.get("asistencia_11") or 0),
         "asistencia_18": int(data.get("asistencia_18") or 0),
@@ -1166,7 +1234,7 @@ def admin_metricas_culto():
         "kilo_amor": int(data.get("kilo_amor") or 0),
         "camaras_am": int(data.get("camaras_am") or 0),
         "camaras_pm": int(data.get("camaras_pm") or 0),
-        "observaciones": str(data.get("observaciones") or "").strip()
+        "observaciones": obs_to_save
     }
 
     try:
@@ -1175,7 +1243,7 @@ def admin_metricas_culto():
             supabase.table("metricas_culto").update(payload).eq("id", existing.data[0]["id"]).execute()
         else:
             supabase.table("metricas_culto").insert(payload).execute()
-        return jsonify({"status": "success", "message": "Métricas guardadas exitosamente"})
+        return jsonify({"status": "success", "message": "Planilla y estadísticas guardadas exitosamente"})
     except Exception as e:
         return jsonify({"status": "error", "message": f"Error al guardar métricas: {e}"}), 500
 
@@ -1197,7 +1265,7 @@ def admin_listar():
         .order("created_at", desc=True) \
         .execute()
 
-    return jsonify(sort_registros_by_fila(res.data))
+    return jsonify(sort_registros_by_sector_then_fila(res.data))
 
 
 @app.route('/admin/borrar', methods=['POST'])
