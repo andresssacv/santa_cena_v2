@@ -5,9 +5,11 @@
   <title>Panel de Administración y Métricas · Santa Cena 2026</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <!-- Tailwind CSS & Chart.js -->
+  <!-- Tailwind CSS, Chart.js & jsPDF para Informes Estructurados -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
 
   <!-- Google Font -->
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -205,13 +207,19 @@
     <!-- ======================================================== -->
     <section id="tab-dashboard" class="hidden space-y-4 sm:space-y-6">
 
-      <!-- Botón Imprimir / PDF -->
+      <!-- Botón Descargar Informe PDF Estructurado -->
       <div class="no-print flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
         <span class="text-xs text-slate-500 font-semibold">Resumen analítico y distribución física en vivo</span>
-        <button onclick="window.print()" class="w-full sm:w-auto px-4 py-2 bg-slate-900 text-white rounded-xl text-xs sm:text-sm font-bold hover:bg-black transition inline-flex items-center justify-center gap-2 shadow-sm">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
-          <span>Imprimir / Guardar Informe PDF</span>
-        </button>
+        <div class="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+          <button onclick="descargarInformePDFEstructurado()" class="flex-1 sm:flex-initial px-4 py-2 bg-[#8b1e2d] text-white rounded-xl text-xs sm:text-sm font-extrabold hover:bg-[#701824] transition inline-flex items-center justify-center gap-2 shadow-sm">
+            <span>📄</span>
+            <span>Descargar Informe Ejecutivo PDF</span>
+          </button>
+          <button onclick="window.print()" class="px-3 py-2 bg-slate-900 text-white rounded-xl text-xs sm:text-sm font-bold hover:bg-black transition inline-flex items-center justify-center gap-1.5 shadow-sm">
+            <span>🖨️</span>
+            <span class="hidden sm:inline">Imprimir Vista</span>
+          </button>
+        </div>
       </div>
 
       <!-- Membrete Impresión -->
@@ -526,283 +534,370 @@
     <!-- ======================================================== -->
     <!-- PESTAÑA 3: CONTEO, PLANILLA EXCEL & ESTADÍSTICAS (SOLO ADMIN) -->
     <!-- ======================================================== -->
-    <section id="tab-metricas" class="hidden space-y-6">
+    <section id="tab-metricas" class="hidden space-y-5 sm:space-y-6">
 
-      <!-- Barra Superior: Selector de Mes, Leyenda Amarilla y Guardar -->
-      <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-        <div>
-          <div class="flex items-center gap-2">
-            <span class="px-2.5 py-0.5 rounded-lg bg-[#8b1e2d] text-white text-[11px] font-black uppercase tracking-wider">Exclusivo Administradores</span>
-            <h2 class="text-base sm:text-lg font-black text-slate-900">Planilla Oficial de Conteo, Insumos y Estadísticas 2026</h2>
+      <!-- Barra Superior: Selector de Mes, Guardar Todo y Descargar Informe PDF Estructurado -->
+      <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          <div>
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="px-2.5 py-0.5 rounded-lg bg-[#8b1e2d] text-white text-[10px] sm:text-[11px] font-black uppercase tracking-wider">Exclusivo Administradores</span>
+              <h2 class="text-base sm:text-lg font-black text-slate-900">Planilla Oficial de Conteo, Insumos y Estadísticas 2026</h2>
+            </div>
+            <p class="text-xs text-slate-500 font-medium mt-1">
+              Ingresa o corrige los datos en las <span class="inline-block px-1.5 py-0.5 rounded bg-amber-100 border border-amber-400 text-amber-900 font-bold">🟨 celdas amarillas</span> y presiona <strong>Guardar Todo</strong> para actualizar la base de datos y los gráficos.
+            </p>
           </div>
-          <p class="text-xs text-slate-500 font-medium mt-1">
-            Ingresa únicamente los datos en las <span class="inline-block px-2 py-0.5 rounded bg-amber-100 border border-amber-400 text-amber-900 font-bold">🟨 celdas amarillas</span>. Todos los totales, saldos, variaciones y gráficos se calculan solos.
-          </p>
+
+          <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+            <div class="flex items-center justify-between gap-2 bg-rose-50/70 border-2 border-[#8b1e2d]/30 rounded-xl px-3 py-2">
+              <span class="text-xs font-extrabold text-slate-600 uppercase whitespace-nowrap">📅 Mes a Editar:</span>
+              <select id="excelMesActivo" onchange="cambiarMesExcel(this.value)" class="bg-transparent text-sm font-black text-[#8b1e2d] outline-none cursor-pointer">
+                <option value="Enero">Enero 2026</option>
+                <option value="Febrero">Febrero 2026</option>
+                <option value="Marzo">Marzo 2026</option>
+                <option value="Abril">Abril 2026</option>
+                <option value="Mayo">Mayo 2026</option>
+                <option value="Junio">Junio 2026</option>
+                <option value="Julio">Julio 2026</option>
+                <option value="Agosto">Agosto 2026</option>
+                <option value="Septiembre">Septiembre 2026</option>
+                <option value="Octubre" selected>Octubre 2026</option>
+                <option value="Noviembre">Noviembre 2026</option>
+                <option value="Diciembre">Diciembre 2026</option>
+              </select>
+            </div>
+
+            <button type="button" onclick="guardarMetricas()" id="btnGuardarMetricasTop" class="px-4 py-2.5 bg-[#8b1e2d] text-white rounded-xl text-xs sm:text-sm font-extrabold hover:bg-[#701824] shadow-md transition inline-flex items-center justify-center gap-1.5">
+              <span>💾</span> <span>Guardar Todo e Incluir en Gráficos</span>
+            </button>
+
+            <button type="button" onclick="descargarInformePDFEstructurado()" class="px-4 py-2.5 bg-slate-900 text-white rounded-xl text-xs sm:text-sm font-extrabold hover:bg-black shadow-md transition inline-flex items-center justify-center gap-1.5">
+              <span>📄</span> <span>Descargar Informe PDF Oficial</span>
+            </button>
+          </div>
         </div>
 
-        <div class="flex flex-wrap items-center gap-2.5">
-          <div class="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5">
-            <span class="text-xs font-extrabold text-slate-500 uppercase">Mes Activo:</span>
-            <select id="excelMesActivo" onchange="cambiarMesExcel(this.value)" class="bg-transparent text-sm font-black text-[#8b1e2d] outline-none cursor-pointer">
-              <option value="Enero">Enero 2026</option>
-              <option value="Febrero">Febrero 2026</option>
-              <option value="Marzo">Marzo 2026</option>
-              <option value="Abril">Abril 2026</option>
-              <option value="Mayo">Mayo 2026</option>
-              <option value="Junio">Junio 2026</option>
-              <option value="Julio">Julio 2026</option>
-              <option value="Agosto">Agosto 2026</option>
-              <option value="Septiembre">Septiembre 2026</option>
-              <option value="Octubre" selected>Octubre 2026</option>
-              <option value="Noviembre">Noviembre 2026</option>
-              <option value="Diciembre">Diciembre 2026</option>
-            </select>
+        <!-- Banner de Estado de Guardado + Selector Rápido de Meses Guardados -->
+        <div class="pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+          <div id="bannerEstadoGuardado" class="inline-flex items-center gap-2 font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl">
+            <span>✅</span> <span id="textoEstadoGuardado">Datos sincronizados y listos. Puedes seleccionar cualquier mes para ver o corregir sus cifras.</span>
           </div>
+          <span class="text-[11px] text-slate-400 font-semibold">Toca cualquier mes abajo para cargar sus datos o corregir errores</span>
+        </div>
 
-          <button type="button" onclick="guardarMetricas()" id="btnGuardarMetricasTop" class="px-4 py-2.5 bg-[#8b1e2d] text-white rounded-xl text-xs sm:text-sm font-extrabold hover:bg-[#701824] shadow-md transition inline-flex items-center gap-1.5">
-            <span>💾</span> Guardar Planilla y Estadísticas
-          </button>
-
-          <button type="button" onclick="window.print()" class="no-print px-3.5 py-2.5 bg-slate-900 text-white rounded-xl text-xs sm:text-sm font-bold hover:bg-black transition inline-flex items-center gap-1.5">
-            <span>🖨️</span> PDF
-          </button>
+        <!-- Botones Rápidos Mes a Mes -->
+        <div id="barraMesesGuardados" class="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+          <!-- Renderizado dinámico por JS -->
         </div>
       </div>
 
-      <!-- 4 TARJETAS KPI RESUMEN AUTOMÁTICO DEL MES -->
+      <!-- 4 TARJETAS KPI RESUMEN AUTOMÁTICO DEL MES ACTIVO -->
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
         
-        <div class="bg-white p-3.5 sm:p-5 rounded-2xl border border-slate-200 shadow-sm">
+        <div class="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-sm">
           <span class="text-[10px] sm:text-xs font-extrabold uppercase text-slate-400 tracking-wider">Cenas Servidas (<span class="label-mes-activo">Octubre</span>)</span>
           <div id="card-asistencia-total" class="text-2xl sm:text-3xl font-black text-[#8b1e2d] mt-1">7.005</div>
-          <span id="card-asistencia-detalle" class="text-[11px] sm:text-xs text-slate-500 font-bold">1ª: 4.636 · 2ª: 2.369</span>
+          <span id="card-asistencia-detalle" class="text-[11px] sm:text-xs text-slate-500 font-bold block mt-0.5">1ª: 4.636 · 2ª: 2.369</span>
         </div>
 
-        <div class="bg-white p-3.5 sm:p-5 rounded-2xl border border-slate-200 shadow-sm">
+        <div class="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-sm">
           <span class="text-[10px] sm:text-xs font-extrabold uppercase text-slate-400 tracking-wider">Conteo Asistencia General</span>
           <div id="card-conteo-total" class="text-2xl sm:text-3xl font-black text-slate-900 mt-1">6.931</div>
-          <span id="card-conteo-detalle" class="text-[11px] sm:text-xs text-slate-500 font-bold">1ª: 4.767 · 2ª: 2.164</span>
+          <span id="card-conteo-detalle" class="text-[11px] sm:text-xs text-slate-500 font-bold block mt-0.5">1ª: 4.767 · 2ª: 2.164</span>
         </div>
 
-        <div class="bg-white p-3.5 sm:p-5 rounded-2xl border-2 border-red-500 shadow-sm">
-          <span class="text-[10px] sm:text-xs font-extrabold uppercase text-red-600 tracking-wider">No Cenaron (Total Mes)</span>
+        <div class="bg-white p-3.5 sm:p-4 rounded-2xl border-2 border-red-500 shadow-sm">
+          <span class="text-[10px] sm:text-xs font-extrabold uppercase text-red-600 tracking-wider">No Cenaron (<span class="label-mes-activo">Octubre</span>)</span>
           <div id="card-no-cenaron" class="text-2xl sm:text-3xl font-black text-red-600 mt-1">14</div>
-          <span id="card-no-cenaron-detalle" class="text-[11px] sm:text-xs text-red-500 font-bold">1ª: 8 · 2ª: 6 personas</span>
+          <span id="card-no-cenaron-detalle" class="text-[11px] sm:text-xs text-red-500 font-bold block mt-0.5">1ª: 8 · 2ª: 6 personas</span>
         </div>
 
-        <div class="bg-white p-3.5 sm:p-5 rounded-2xl border border-slate-200 shadow-sm">
+        <div class="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-sm">
           <span class="text-[10px] sm:text-xs font-extrabold uppercase text-slate-400 tracking-wider">Saldo Final & Dif. Conteo</span>
           <div id="card-diferencia" class="text-2xl sm:text-3xl font-black text-slate-900 mt-1">-74</div>
-          <span id="card-conciliacion-sub" class="text-[11px] sm:text-xs text-emerald-700 font-bold">Sobrante: 615 unid. (15,38 band.)</span>
+          <span id="card-conciliacion-sub" class="text-[11px] sm:text-xs text-emerald-700 font-bold block mt-0.5">Sobrante: 615 unid. (15,38 band.)</span>
         </div>
 
       </div>
 
       <!-- ======================================================== -->
-      <!-- SECCIÓN A: PREPARACIÓN DE CENAS (SÁBADO Y DOMINGO) -->
+      <!-- GRÁFICOS ESTADÍSTICOS EN LA PARTE SUPERIOR (ACTUALIZACIÓN EN VIVO) -->
+      <!-- ======================================================== -->
+      <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-100 gap-2">
+          <div>
+            <h3 class="text-sm sm:text-base font-black text-slate-900 uppercase tracking-wider">📈 Gráficos Estadísticos y Comparativa Mes a Mes</h3>
+            <p class="text-xs text-slate-500 font-medium">Al ingresar datos abajo y presionar <strong>Guardar Todo</strong>, estos gráficos incorporan automáticamente los resultados del mes</p>
+          </div>
+          <button type="button" onclick="descargarInformePDFEstructurado()" class="px-3.5 py-2 bg-rose-50 text-[#8b1e2d] border border-rose-200 rounded-xl text-xs font-extrabold hover:bg-rose-100 transition inline-flex items-center gap-1.5 self-start sm:self-auto">
+            <span>📊</span> Exportar Reporte Comparativo PDF
+          </button>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          
+          <!-- Gráfico Estadístico 1: Evolución Mensual 2026 -->
+          <div class="bg-slate-50/70 p-3.5 sm:p-4 rounded-2xl border border-slate-200/80">
+            <h4 class="text-xs sm:text-sm font-extrabold text-slate-900 uppercase">1. Evolución Mensual Santa Cena 2026</h4>
+            <p class="text-[11px] text-slate-500 mb-2">Comparativa Mes a Mes: 1ª Reunión, 2ª Reunión y Total Servido</p>
+            <div class="h-60 sm:h-68 w-full">
+              <canvas id="chartExcelAnual"></canvas>
+            </div>
+          </div>
+
+          <!-- Gráfico Estadístico 2: Comparativa Santa Cena vs Conteo Asistencia -->
+          <div class="bg-slate-50/70 p-3.5 sm:p-4 rounded-2xl border border-slate-200/80">
+            <h4 class="text-xs sm:text-sm font-extrabold text-slate-900 uppercase">2. Cenas Servidas vs Conteo General Asistencia</h4>
+            <p class="text-[11px] text-slate-500 mb-2">Comparativa histórica mensual de comunión vs asistencia auditorio</p>
+            <div class="h-60 sm:h-68 w-full">
+              <canvas id="chartExcelComparativa"></canvas>
+            </div>
+          </div>
+
+          <!-- Gráfico Estadístico 3: Cenas Servidas por Sector / Área del Mes -->
+          <div class="bg-slate-50/70 p-3.5 sm:p-4 rounded-2xl border border-slate-200/80">
+            <h4 class="text-xs sm:text-sm font-extrabold text-slate-900 uppercase">3. Cenas por Sector en <span class="label-mes-activo">Octubre</span> (11:00 vs 18:30)</h4>
+            <p class="text-[11px] text-slate-500 mb-2">Distribución por sectores y áreas especiales del mes seleccionado</p>
+            <div class="h-60 sm:h-68 w-full">
+              <canvas id="chartExcelSectores"></canvas>
+            </div>
+          </div>
+
+          <!-- Gráfico Estadístico 4: Histórico de "No Cenaron" -->
+          <div class="bg-slate-50/70 p-3.5 sm:p-4 rounded-2xl border border-slate-200/80">
+            <h4 class="text-xs sm:text-sm font-extrabold text-slate-900 uppercase">4. Control Mensual "No Cenaron" (2026)</h4>
+            <p class="text-[11px] text-slate-500 mb-2">Evolución de personas sin servir mes a mes</p>
+            <div class="h-60 sm:h-68 w-full">
+              <canvas id="chartExcelNoCenaron"></canvas>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ======================================================== -->
+      <!-- SECCIÓN A: PREPARACIÓN DE CENAS (100% ADAPTADA A CELULAR) -->
       <!-- ======================================================== -->
       <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         <div class="bg-slate-900 text-white px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
-            <h3 class="text-xs sm:text-sm font-black uppercase tracking-wider">1. Preparación de Cenas (Sábado y Extras Domingo)</h3>
+            <h3 class="text-xs sm:text-sm font-black uppercase tracking-wider">1. Preparación de Cenas (<span class="label-mes-activo">Octubre</span>)</h3>
             <p class="text-[11px] text-slate-300">Cálculo inicial de bandejas y unidades disponibles para el servicio</p>
           </div>
-          <div class="text-xs font-black bg-white/10 px-3 py-1 rounded-lg">
-            Total Disponible: <span id="prep-total-badge" class="text-amber-300">7.620</span> unidades
+          <div class="text-xs font-black bg-white/10 px-3 py-1.5 rounded-lg self-start sm:self-auto">
+            Total Disponible Inicial: <span id="prep-total-badge" class="text-amber-300">7.620</span> unid.
           </div>
         </div>
 
-        <div class="p-4 overflow-x-auto">
-          <table class="w-full text-left text-xs sm:text-sm text-slate-700 min-w-[540px]">
-            <thead class="bg-slate-50 border-b border-slate-200 text-[11px] uppercase font-extrabold text-slate-500">
-              <tr>
-                <th class="py-2.5 px-3">Concepto de Preparación</th>
-                <th class="py-2.5 px-3 text-center">Bandejas 🟨</th>
-                <th class="py-2.5 px-3 text-center">Cant. x Bandeja 🟨</th>
-                <th class="py-2.5 px-3 text-right">Total Unidades (Auto)</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-100 font-semibold">
-              <tr>
-                <td class="py-2.5 px-3 font-bold text-slate-900">Cenas Preparadas Sábado</td>
-                <td class="py-2 px-3 text-center">
-                  <input type="number" id="prep_sab_band" oninput="recalcularTodoExcel()" class="w-24 text-center py-1.5 px-2 rounded-lg bg-amber-50 border-2 border-amber-300 font-black text-amber-950 focus:bg-yellow-100 focus:border-amber-500 outline-none" value="189">
-                </td>
-                <td class="py-2 px-3 text-center">
-                  <input type="number" id="prep_sab_cant" oninput="recalcularTodoExcel()" class="w-20 text-center py-1.5 px-2 rounded-lg bg-amber-50 border border-amber-300 font-bold text-amber-900 outline-none" value="40">
-                </td>
-                <td id="prep_sab_total" class="py-2.5 px-3 text-right font-black text-slate-900">7.560</td>
-              </tr>
-              <tr>
-                <td class="py-2.5 px-3 font-bold text-slate-900">Púlpito (Preparación Sábado)</td>
-                <td class="py-2 px-3 text-center">
-                  <input type="number" id="prep_pulp_band" oninput="recalcularTodoExcel()" class="w-24 text-center py-1.5 px-2 rounded-lg bg-amber-50 border-2 border-amber-300 font-black text-amber-950 focus:bg-yellow-100 focus:border-amber-500 outline-none" value="4">
-                </td>
-                <td class="py-2 px-3 text-center">
-                  <input type="number" id="prep_pulp_cant" oninput="recalcularTodoExcel()" class="w-20 text-center py-1.5 px-2 rounded-lg bg-amber-50 border border-amber-300 font-bold text-amber-900 outline-none" value="15">
-                </td>
-                <td id="prep_pulp_total" class="py-2.5 px-3 text-right font-black text-slate-900">60</td>
-              </tr>
-              <tr class="bg-slate-50/80">
-                <td class="py-2.5 px-3 font-bold text-slate-800">Cenas Extras Preparadas Domingo</td>
-                <td class="py-2 px-3 text-center">
-                  <input type="number" id="prep_dom_band" oninput="recalcularTodoExcel()" class="w-24 text-center py-1.5 px-2 rounded-lg bg-amber-50 border-2 border-amber-300 font-black text-amber-950 focus:bg-yellow-100 focus:border-amber-500 outline-none" value="0">
-                </td>
-                <td class="py-2 px-3 text-center">
-                  <input type="number" id="prep_dom_cant" oninput="recalcularTodoExcel()" class="w-20 text-center py-1.5 px-2 rounded-lg bg-amber-50 border border-amber-300 font-bold text-amber-900 outline-none" value="40">
-                </td>
-                <td id="prep_dom_total" class="py-2.5 px-3 text-right font-black text-slate-900">0</td>
-              </tr>
-            </tbody>
-            <tfoot class="bg-rose-50/70 border-t-2 border-[#8b1e2d]/30 font-black text-slate-900">
-              <tr>
-                <td class="py-3 px-3 uppercase text-xs text-[#8b1e2d]">Total General Preparado</td>
-                <td id="prep_total_bandejas" class="py-3 px-3 text-center text-[#8b1e2d]">189 (+4 Púlp.)</td>
-                <td class="py-3 px-3 text-center text-slate-400">—</td>
-                <td id="prep_gran_total" class="py-3 px-3 text-right text-base text-[#8b1e2d]">7.620</td>
-              </tr>
-            </tfoot>
-          </table>
+        <div class="p-3.5 sm:p-4 space-y-3">
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            
+            <!-- Item 1: Cenas Preparadas Sábado -->
+            <div class="p-3.5 rounded-xl border border-slate-200 bg-slate-50/60 space-y-2.5">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-extrabold text-slate-900">Cenas Preparadas Sábado</span>
+                <span class="px-2 py-0.5 rounded-lg bg-white border border-slate-200 text-xs font-black text-slate-900">Total: <span id="prep_sab_total">7.560</span></span>
+              </div>
+              <div class="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label class="block text-[10px] font-extrabold uppercase text-amber-900 mb-1">Bandejas 🟨</label>
+                  <input type="number" id="prep_sab_band" oninput="recalcularTodoExcel()" class="w-full text-center py-2 px-2 rounded-xl bg-amber-50 border-2 border-amber-300 font-black text-sm text-amber-950 focus:bg-yellow-100 focus:border-amber-500 outline-none" value="189">
+                </div>
+                <div>
+                  <label class="block text-[10px] font-extrabold uppercase text-slate-500 mb-1">Cant. x Bandeja 🟨</label>
+                  <input type="number" id="prep_sab_cant" oninput="recalcularTodoExcel()" class="w-full text-center py-2 px-2 rounded-xl bg-amber-50 border border-amber-300 font-bold text-sm text-amber-900 outline-none" value="40">
+                </div>
+              </div>
+            </div>
+
+            <!-- Item 2: Púlpito (Preparación Sábado) -->
+            <div class="p-3.5 rounded-xl border border-slate-200 bg-slate-50/60 space-y-2.5">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-extrabold text-slate-900">Púlpito (Sábado)</span>
+                <span class="px-2 py-0.5 rounded-lg bg-white border border-slate-200 text-xs font-black text-slate-900">Total: <span id="prep_pulp_total">60</span></span>
+              </div>
+              <div class="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label class="block text-[10px] font-extrabold uppercase text-amber-900 mb-1">Bandejas 🟨</label>
+                  <input type="number" id="prep_pulp_band" oninput="recalcularTodoExcel()" class="w-full text-center py-2 px-2 rounded-xl bg-amber-50 border-2 border-amber-300 font-black text-sm text-amber-950 focus:bg-yellow-100 focus:border-amber-500 outline-none" value="4">
+                </div>
+                <div>
+                  <label class="block text-[10px] font-extrabold uppercase text-slate-500 mb-1">Cant. x Bandeja 🟨</label>
+                  <input type="number" id="prep_pulp_cant" oninput="recalcularTodoExcel()" class="w-full text-center py-2 px-2 rounded-xl bg-amber-50 border border-amber-300 font-bold text-sm text-amber-900 outline-none" value="15">
+                </div>
+              </div>
+            </div>
+
+            <!-- Item 3: Cenas Extras Domingo -->
+            <div class="p-3.5 rounded-xl border border-slate-200 bg-slate-50/60 space-y-2.5">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-extrabold text-slate-900">Extras Domingo</span>
+                <span class="px-2 py-0.5 rounded-lg bg-white border border-slate-200 text-xs font-black text-slate-900">Total: <span id="prep_dom_total">0</span></span>
+              </div>
+              <div class="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label class="block text-[10px] font-extrabold uppercase text-amber-900 mb-1">Bandejas 🟨</label>
+                  <input type="number" id="prep_dom_band" oninput="recalcularTodoExcel()" class="w-full text-center py-2 px-2 rounded-xl bg-amber-50 border-2 border-amber-300 font-black text-sm text-amber-950 focus:bg-yellow-100 focus:border-amber-500 outline-none" value="0">
+                </div>
+                <div>
+                  <label class="block text-[10px] font-extrabold uppercase text-slate-500 mb-1">Cant. x Bandeja 🟨</label>
+                  <input type="number" id="prep_dom_cant" oninput="recalcularTodoExcel()" class="w-full text-center py-2 px-2 rounded-xl bg-amber-50 border border-amber-300 font-bold text-sm text-amber-900 outline-none" value="40">
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Resumen Total Preparado -->
+          <div class="p-3 rounded-xl bg-rose-50/80 border border-[#8b1e2d]/30 flex flex-wrap items-center justify-between gap-2 text-xs sm:text-sm font-black text-[#8b1e2d]">
+            <span>TOTAL GENERAL PREPARADO:</span>
+            <div class="flex items-center gap-4">
+              <span>Bandejas: <strong id="prep_total_bandejas">189 (+4 Púlp.)</strong></span>
+              <span class="text-base">Unidades: <strong id="prep_gran_total">7.620</strong></span>
+            </div>
+          </div>
         </div>
       </div>
 
       <!-- ======================================================== -->
       <!-- SECCIÓN B: 1RA REUNIÓN 11:00 HRS Y 2DA REUNIÓN 18:30 HRS -->
+      <!-- DISEÑO RESPONSIVO SIN DESCUADRE EN CELULAR NI ESCRITORIO -->
       <!-- ======================================================== -->
       <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
 
-        <!-- TABLA 1RA REUNIÓN (11:00 HRS) -->
+        <!-- BLOQUE 1RA REUNIÓN (11:00 HRS) -->
         <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col justify-between">
           <div>
             <div class="bg-[#8b1e2d] text-white px-4 py-3 flex items-center justify-between">
               <div>
                 <h3 class="text-xs sm:text-sm font-black uppercase tracking-wider">2. 1ra. Reunión · 11:00 Hrs.</h3>
-                <p class="text-[11px] text-rose-200">Ingresa Bandejas y Unidades Devueltas en amarillo</p>
+                <p class="text-[11px] text-rose-200">Llena las casillas amarillas de cada sector</p>
               </div>
-              <span class="px-2.5 py-1 rounded-lg bg-black/20 text-xs font-black">Servidas: <span id="head-servidas-11">4.636</span></span>
+              <span class="px-3 py-1 rounded-xl bg-black/25 text-xs font-black whitespace-nowrap">Servidas: <span id="head-servidas-11">4.636</span></span>
             </div>
 
-            <div class="overflow-x-auto">
-              <table class="w-full text-left text-xs text-slate-700 min-w-[600px]">
-                <thead class="bg-slate-50 border-b border-slate-200 text-[10px] uppercase font-extrabold text-slate-500">
-                  <tr class="whitespace-nowrap">
-                    <th class="py-2.5 px-2.5">Sector / Área</th>
-                    <th class="py-2.5 px-2 text-center bg-amber-50/60 text-amber-900">Bandejas 🟨</th>
-                    <th class="py-2.5 px-1.5 text-center">Cant.</th>
-                    <th class="py-2.5 px-2 text-right">Total Entr.</th>
-                    <th class="py-2.5 px-2 text-right">Band. Dev.</th>
-                    <th class="py-2.5 px-2 text-center bg-amber-50/60 text-amber-900">Unid. Dev. 🟨</th>
-                    <th class="py-2.5 px-2.5 text-right text-[#8b1e2d]">Cenas Servidas</th>
-                  </tr>
-                </thead>
-                <tbody id="tbody-reunion-11" class="divide-y divide-slate-100 font-semibold">
-                  <!-- Renderizado dinámico por JS -->
-                </tbody>
-                <tfoot class="bg-slate-100 border-t-2 border-slate-300 font-black text-slate-900 text-xs">
-                  <tr>
-                    <td class="py-2.5 px-2.5 uppercase">Totales 1ª Reunión</td>
-                    <td id="tot11-band" class="py-2.5 px-2 text-center">187</td>
-                    <td id="tot11-cant" class="py-2.5 px-1.5 text-center text-slate-400">299</td>
-                    <td id="tot11-entr" class="py-2.5 px-2 text-right">7.394</td>
-                    <td id="tot11-bdev" class="py-2.5 px-2 text-right text-slate-600">68,50</td>
-                    <td id="tot11-udev" class="py-2.5 px-2 text-center text-amber-900">2.758</td>
-                    <td id="tot11-serv" class="py-2.5 px-2.5 text-right text-sm text-[#8b1e2d]">4.636</td>
-                  </tr>
-                  <tr class="bg-emerald-50 text-emerald-900 border-t border-emerald-200">
-                    <td colspan="4" class="py-2 px-2.5 font-extrabold">Saldo después del 1er. Culto (Pasa al 2do Culto)</td>
-                    <td id="saldo11-band" class="py-2 px-2 text-right font-black">74,60 band.</td>
-                    <td class="py-2 px-2 text-center text-[10px] font-bold">÷ 40</td>
-                    <td id="saldo11-unid" class="py-2 px-2.5 text-right font-black text-sm">2.984 unid.</td>
-                  </tr>
-                </tfoot>
-              </table>
+            <!-- Encabezado visible solo en pantallas medianas/grandes -->
+            <div class="hidden sm:grid sm:grid-cols-12 bg-slate-100 border-b border-slate-200 px-3 py-2 text-[10px] uppercase font-extrabold text-slate-500 items-center">
+              <div class="col-span-3">Sector / Área</div>
+              <div class="col-span-2 text-center text-amber-900">Bandejas 🟨</div>
+              <div class="col-span-1 text-center">Cant.</div>
+              <div class="col-span-2 text-right">Entregado</div>
+              <div class="col-span-1 text-right">B. Dev</div>
+              <div class="col-span-2 text-center text-amber-900">Unid. Dev 🟨</div>
+              <div class="col-span-1 text-right text-[#8b1e2d]">Servidas</div>
+            </div>
+
+            <!-- Lista de Sectores 1ra Reunión (Tarjetas cuadradas en móvil, filas en PC) -->
+            <div id="tbody-reunion-11" class="divide-y divide-slate-200">
+              <!-- Renderizado dinámico por JS -->
+            </div>
+
+            <!-- Totales y Saldo 1ra Reunión (100% adaptable a celular) -->
+            <div class="bg-slate-100 border-t-2 border-slate-300 p-3 sm:px-4 space-y-2 text-xs">
+              <div class="flex flex-wrap items-center justify-between gap-2 font-black text-slate-900">
+                <span class="uppercase text-[#8b1e2d]">TOTALES 1ª REUNIÓN (11:00):</span>
+                <span class="text-sm sm:text-base text-[#8b1e2d]">Cenas Servidas: <strong id="tot11-serv">4.636</strong></span>
+              </div>
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-[11px] font-bold text-slate-600">
+                <div class="bg-white px-2.5 py-1.5 rounded-lg border border-slate-200">Bandejas: <strong id="tot11-band" class="text-slate-900">187</strong> <span class="hidden" id="tot11-cant">299</span></div>
+                <div class="bg-white px-2.5 py-1.5 rounded-lg border border-slate-200">Entregado: <strong id="tot11-entr" class="text-slate-900">7.394</strong></div>
+                <div class="bg-white px-2.5 py-1.5 rounded-lg border border-slate-200">Band. Dev.: <strong id="tot11-bdev" class="text-slate-900">68,50</strong></div>
+                <div class="bg-white px-2.5 py-1.5 rounded-lg border border-slate-200">Unid. Dev.: <strong id="tot11-udev" class="text-amber-900">2.758</strong></div>
+              </div>
+              <div class="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 flex flex-wrap items-center justify-between gap-2 font-black">
+                <span>Saldo para 2do Culto:</span>
+                <div>
+                  <span id="saldo11-band">74,60 band.</span> · <span id="saldo11-unid" class="text-sm">2.984 unid.</span>
+                </div>
+              </div>
             </div>
           </div>
 
           <!-- Inputs inferiores 1ra Reunión: No Cenaron y Conteo Asistencia -->
-          <div class="p-3.5 bg-slate-50 border-t border-slate-200 grid grid-cols-2 gap-3">
-            <div class="bg-white p-2.5 rounded-xl border border-red-200 flex items-center justify-between">
+          <div class="p-3.5 bg-slate-50 border-t border-slate-200 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <div class="bg-white p-3 rounded-xl border border-red-200 flex items-center justify-between gap-2">
               <div>
-                <span class="block text-[10px] font-extrabold uppercase text-red-600">No Cenaron 1ª Reunión 🟨</span>
-                <span class="text-[10px] text-slate-400">Personas sin servir 11:00</span>
+                <span class="block text-xs font-extrabold uppercase text-red-600">No Cenaron 1ª Reunión 🟨</span>
+                <span class="text-[11px] text-slate-400">Personas sin servir (11:00)</span>
               </div>
-              <input type="number" id="no_cenaron_11" oninput="recalcularTodoExcel()" class="w-16 text-center py-1.5 px-2 rounded-lg bg-amber-50 border-2 border-amber-400 font-black text-red-700 text-sm outline-none" value="8">
+              <input type="number" id="no_cenaron_11" oninput="recalcularTodoExcel()" class="w-20 text-center py-2 px-2 rounded-xl bg-amber-50 border-2 border-amber-400 font-black text-red-700 text-sm outline-none" value="8">
             </div>
 
-            <div class="bg-white p-2.5 rounded-xl border border-slate-200 flex items-center justify-between">
+            <div class="bg-white p-3 rounded-xl border border-slate-200 flex items-center justify-between gap-2">
               <div>
-                <span class="block text-[10px] font-extrabold uppercase text-slate-600">Conteo General 1ª 🟨</span>
-                <span class="text-[10px] text-slate-400">Asistencia auditorio 11:00</span>
+                <span class="block text-xs font-extrabold uppercase text-slate-700">Conteo Asistencia 1ª 🟨</span>
+                <span class="text-[11px] text-slate-400">Asistencia general (11:00)</span>
               </div>
-              <input type="number" id="excel_conteo_11" oninput="recalcularTodoExcel()" class="w-20 text-center py-1.5 px-2 rounded-lg bg-amber-50 border-2 border-amber-400 font-black text-slate-900 text-sm outline-none" value="4767">
+              <input type="number" id="excel_conteo_11" oninput="recalcularTodoExcel()" class="w-24 text-center py-2 px-2 rounded-xl bg-amber-50 border-2 border-amber-400 font-black text-slate-900 text-sm outline-none" value="4767">
             </div>
           </div>
         </div>
 
-        <!-- TABLA 2DA REUNIÓN (18:30 HRS) -->
+        <!-- BLOQUE 2DA REUNIÓN (18:30 HRS) -->
         <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col justify-between">
           <div>
             <div class="bg-slate-800 text-white px-4 py-3 flex items-center justify-between">
               <div>
                 <h3 class="text-xs sm:text-sm font-black uppercase tracking-wider">3. 2da. Reunión · 18:30 Hrs.</h3>
-                <p class="text-[11px] text-slate-300">Saldo Inicial 2do Culto: <strong id="saldo-ini-18-label" class="text-emerald-300">74,60 bandejas / 2.984 unid.</strong></p>
+                <p class="text-[11px] text-slate-300">Saldo Inicial: <strong id="saldo-ini-18-label" class="text-emerald-300">74,60 bandejas / 2.984 unid.</strong></p>
               </div>
-              <span class="px-2.5 py-1 rounded-lg bg-white/10 text-xs font-black">Servidas: <span id="head-servidas-18">2.369</span></span>
+              <span class="px-3 py-1 rounded-xl bg-white/15 text-xs font-black whitespace-nowrap">Servidas: <span id="head-servidas-18">2.369</span></span>
             </div>
 
-            <div class="overflow-x-auto">
-              <table class="w-full text-left text-xs text-slate-700 min-w-[600px]">
-                <thead class="bg-slate-50 border-b border-slate-200 text-[10px] uppercase font-extrabold text-slate-500">
-                  <tr class="whitespace-nowrap">
-                    <th class="py-2.5 px-2.5">Sector / Área</th>
-                    <th class="py-2.5 px-2 text-center bg-amber-50/60 text-amber-900">Bandejas 🟨</th>
-                    <th class="py-2.5 px-1.5 text-center">Cant.</th>
-                    <th class="py-2.5 px-2 text-right">Total Entr.</th>
-                    <th class="py-2.5 px-2 text-right">Band. Dev.</th>
-                    <th class="py-2.5 px-2 text-center bg-amber-50/60 text-amber-900">Unid. Dev. 🟨</th>
-                    <th class="py-2.5 px-2.5 text-right text-[#8b1e2d]">Cenas Servidas</th>
-                  </tr>
-                </thead>
-                <tbody id="tbody-reunion-18" class="divide-y divide-slate-100 font-semibold">
-                  <!-- Renderizado dinámico por JS -->
-                </tbody>
-                <tfoot class="bg-slate-100 border-t-2 border-slate-300 font-black text-slate-900 text-xs">
-                  <tr>
-                    <td class="py-2.5 px-2.5 uppercase">Totales 2ª Reunión</td>
-                    <td id="tot18-band" class="py-2.5 px-2 text-center">76</td>
-                    <td id="tot18-cant" class="py-2.5 px-1.5 text-center text-slate-400">233</td>
-                    <td id="tot18-entr" class="py-2.5 px-2 text-right">2.928</td>
-                    <td id="tot18-bdev" class="py-2.5 px-2 text-right text-slate-600">14,77</td>
-                    <td id="tot18-udev" class="py-2.5 px-2 text-center text-amber-900">559</td>
-                    <td id="tot18-serv" class="py-2.5 px-2.5 text-right text-sm text-[#8b1e2d]">2.369</td>
-                  </tr>
-                  <tr class="bg-emerald-50 text-emerald-900 border-t border-emerald-200">
-                    <td colspan="4" class="py-2 px-2.5 font-extrabold">Saldo Final después del 2do. Culto (Sobrante)</td>
-                    <td id="saldo18-band" class="py-2 px-2 text-right font-black">15,38 band.</td>
-                    <td class="py-2 px-2 text-center text-[10px] font-bold">÷ 40</td>
-                    <td id="saldo18-unid" class="py-2 px-2.5 text-right font-black text-sm">615 unid.</td>
-                  </tr>
-                </tfoot>
-              </table>
+            <!-- Encabezado visible solo en pantallas medianas/grandes -->
+            <div class="hidden sm:grid sm:grid-cols-12 bg-slate-100 border-b border-slate-200 px-3 py-2 text-[10px] uppercase font-extrabold text-slate-500 items-center">
+              <div class="col-span-3">Sector / Área</div>
+              <div class="col-span-2 text-center text-amber-900">Bandejas 🟨</div>
+              <div class="col-span-1 text-center">Cant.</div>
+              <div class="col-span-2 text-right">Entregado</div>
+              <div class="col-span-1 text-right">B. Dev</div>
+              <div class="col-span-2 text-center text-amber-900">Unid. Dev 🟨</div>
+              <div class="col-span-1 text-right text-[#8b1e2d]">Servidas</div>
+            </div>
+
+            <!-- Lista de Sectores 2da Reunión (Tarjetas cuadradas en móvil, filas en PC) -->
+            <div id="tbody-reunion-18" class="divide-y divide-slate-200">
+              <!-- Renderizado dinámico por JS -->
+            </div>
+
+            <!-- Totales y Saldo 2da Reunión (100% adaptable a celular) -->
+            <div class="bg-slate-100 border-t-2 border-slate-300 p-3 sm:px-4 space-y-2 text-xs">
+              <div class="flex flex-wrap items-center justify-between gap-2 font-black text-slate-900">
+                <span class="uppercase text-[#8b1e2d]">TOTALES 2ª REUNIÓN (18:30):</span>
+                <span class="text-sm sm:text-base text-[#8b1e2d]">Cenas Servidas: <strong id="tot18-serv">2.369</strong></span>
+              </div>
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-[11px] font-bold text-slate-600">
+                <div class="bg-white px-2.5 py-1.5 rounded-lg border border-slate-200">Bandejas: <strong id="tot18-band" class="text-slate-900">76</strong> <span class="hidden" id="tot18-cant">233</span></div>
+                <div class="bg-white px-2.5 py-1.5 rounded-lg border border-slate-200">Entregado: <strong id="tot18-entr" class="text-slate-900">2.928</strong></div>
+                <div class="bg-white px-2.5 py-1.5 rounded-lg border border-slate-200">Band. Dev.: <strong id="tot18-bdev" class="text-slate-900">14,77</strong></div>
+                <div class="bg-white px-2.5 py-1.5 rounded-lg border border-slate-200">Unid. Dev.: <strong id="tot18-udev" class="text-amber-900">559</strong></div>
+              </div>
+              <div class="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 flex flex-wrap items-center justify-between gap-2 font-black">
+                <span>Saldo Final Sobrante (Post 2do Culto):</span>
+                <div>
+                  <span id="saldo18-band">15,38 band.</span> · <span id="saldo18-unid" class="text-sm">615 unid.</span>
+                </div>
+              </div>
             </div>
           </div>
 
           <!-- Inputs inferiores 2da Reunión: No Cenaron y Conteo Asistencia -->
-          <div class="p-3.5 bg-slate-50 border-t border-slate-200 grid grid-cols-2 gap-3">
-            <div class="bg-white p-2.5 rounded-xl border border-red-200 flex items-center justify-between">
+          <div class="p-3.5 bg-slate-50 border-t border-slate-200 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <div class="bg-white p-3 rounded-xl border border-red-200 flex items-center justify-between gap-2">
               <div>
-                <span class="block text-[10px] font-extrabold uppercase text-red-600">No Cenaron 2ª Reunión 🟨</span>
-                <span class="text-[10px] text-slate-400">Personas sin servir 18:30</span>
+                <span class="block text-xs font-extrabold uppercase text-red-600">No Cenaron 2ª Reunión 🟨</span>
+                <span class="text-[11px] text-slate-400">Personas sin servir (18:30)</span>
               </div>
-              <input type="number" id="no_cenaron_18" oninput="recalcularTodoExcel()" class="w-16 text-center py-1.5 px-2 rounded-lg bg-amber-50 border-2 border-amber-400 font-black text-red-700 text-sm outline-none" value="6">
+              <input type="number" id="no_cenaron_18" oninput="recalcularTodoExcel()" class="w-20 text-center py-2 px-2 rounded-xl bg-amber-50 border-2 border-amber-400 font-black text-red-700 text-sm outline-none" value="6">
             </div>
 
-            <div class="bg-white p-2.5 rounded-xl border border-slate-200 flex items-center justify-between">
+            <div class="bg-white p-3 rounded-xl border border-slate-200 flex items-center justify-between gap-2">
               <div>
-                <span class="block text-[10px] font-extrabold uppercase text-slate-600">Conteo General 2ª 🟨</span>
-                <span class="text-[10px] text-slate-400">Asistencia auditorio 18:30</span>
+                <span class="block text-xs font-extrabold uppercase text-slate-700">Conteo Asistencia 2ª 🟨</span>
+                <span class="text-[11px] text-slate-400">Asistencia general (18:30)</span>
               </div>
-              <input type="number" id="excel_conteo_18" oninput="recalcularTodoExcel()" class="w-20 text-center py-1.5 px-2 rounded-lg bg-amber-50 border-2 border-amber-400 font-black text-slate-900 text-sm outline-none" value="2164">
+              <input type="number" id="excel_conteo_18" oninput="recalcularTodoExcel()" class="w-24 text-center py-2 px-2 rounded-xl bg-amber-50 border-2 border-amber-400 font-black text-slate-900 text-sm outline-none" value="2164">
             </div>
           </div>
         </div>
@@ -821,17 +916,17 @@
               <h3 class="text-xs sm:text-sm font-black uppercase text-slate-900 tracking-wider">4. Detalle Diferencia SC vs Conteo</h3>
               <p class="text-[11px] text-slate-500">Se alimenta automáticamente de UNT Kids, Kilo de Amor y Cámaras</p>
             </div>
-            <span class="px-3 py-1 rounded-xl bg-rose-50 text-[#8b1e2d] font-black text-xs">Total Áreas: <span id="det-total-areas">143</span></span>
+            <span class="px-3 py-1 rounded-xl bg-rose-50 text-[#8b1e2d] font-black text-xs whitespace-nowrap">Total Áreas: <span id="det-total-areas">143</span></span>
           </div>
 
           <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs">
             <div class="p-2.5 rounded-xl bg-amber-50/60 border border-amber-200 flex items-center justify-between">
               <span class="font-bold text-slate-700">UNT Teens AM 🟨</span>
-              <input type="number" id="det_teens_am" oninput="recalcularTodoExcel()" class="w-14 text-center py-1 px-1.5 rounded bg-amber-100 border border-amber-400 font-black text-slate-900" value="0">
+              <input type="number" id="det_teens_am" oninput="recalcularTodoExcel()" class="w-14 text-center py-1 px-1.5 rounded-lg bg-amber-100 border border-amber-400 font-black text-slate-900" value="0">
             </div>
             <div class="p-2.5 rounded-xl bg-amber-50/60 border border-amber-200 flex items-center justify-between">
               <span class="font-bold text-slate-700">UNT Teens PM 🟨</span>
-              <input type="number" id="det_teens_pm" oninput="recalcularTodoExcel()" class="w-14 text-center py-1 px-1.5 rounded bg-amber-100 border border-amber-400 font-black text-slate-900" value="0">
+              <input type="number" id="det_teens_pm" oninput="recalcularTodoExcel()" class="w-14 text-center py-1 px-1.5 rounded-lg bg-amber-100 border border-amber-400 font-black text-slate-900" value="0">
             </div>
             <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between">
               <span class="font-semibold text-slate-600">UNT Kids AM</span>
@@ -868,11 +963,11 @@
                 <h3 class="text-xs sm:text-sm font-black uppercase text-slate-900 tracking-wider">5. Saldo de Unidades, Vino y Observaciones</h3>
                 <p class="text-[11px] text-slate-500">Control de inventario sobrante post-servicio</p>
               </div>
-              <span class="px-3 py-1 rounded-xl bg-emerald-50 text-emerald-800 font-black text-xs">Total Saldo: <span id="vino-gran-total">3.115</span> unid.</span>
+              <span class="px-3 py-1 rounded-xl bg-emerald-50 text-emerald-800 font-black text-xs whitespace-nowrap">Total Saldo: <span id="vino-gran-total">3.115</span> unid.</span>
             </div>
 
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs mb-3">
-              <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-200">
+              <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex sm:block items-center justify-between">
                 <span class="block text-[10px] font-bold text-slate-400 uppercase">Saldo 2do Culto</span>
                 <span id="vino-saldo-culto2" class="text-base font-black text-slate-900">615 unid.</span>
               </div>
@@ -881,14 +976,14 @@
                   <span class="block text-[10px] font-bold text-amber-900 uppercase">Frascos Vino 🟨</span>
                   <span class="text-[10px] text-slate-500">Saldo anterior</span>
                 </div>
-                <input type="number" step="0.1" id="vino_frascos" oninput="recalcularTodoExcel()" class="w-16 text-center py-1 px-1.5 rounded bg-amber-100 border border-amber-400 font-black text-slate-900" value="3">
+                <input type="number" step="0.1" id="vino_frascos" oninput="recalcularTodoExcel()" class="w-16 text-center py-1.5 px-1.5 rounded-lg bg-amber-100 border border-amber-400 font-black text-slate-900" value="3">
               </div>
               <div class="p-2.5 rounded-xl bg-amber-50/60 border border-amber-200 flex items-center justify-between">
                 <div>
                   <span class="block text-[10px] font-bold text-amber-900 uppercase">Unid. Vino 🟨</span>
                   <span class="text-[10px] text-slate-500">Equiv. copitas</span>
                 </div>
-                <input type="number" id="vino_unidades" oninput="recalcularTodoExcel()" class="w-20 text-center py-1 px-1.5 rounded bg-amber-100 border border-amber-400 font-black text-slate-900" value="2500">
+                <input type="number" id="vino_unidades" oninput="recalcularTodoExcel()" class="w-20 text-center py-1.5 px-1.5 rounded-lg bg-amber-100 border border-amber-400 font-black text-slate-900" value="2500">
               </div>
             </div>
           </div>
@@ -902,119 +997,47 @@
       </div>
 
       <!-- ======================================================== -->
-      <!-- SECCIÓN D: GRÁFICOS ESTADÍSTICOS INTERACTIVOS (EXCEL) -->
-      <!-- ======================================================== -->
-      <div class="space-y-4 sm:space-y-6">
-        <div class="flex items-center justify-between px-1">
-          <div>
-            <h3 class="text-sm sm:text-base font-black text-slate-900 uppercase tracking-wider">📈 Gráficos Estadísticos Generados en Vivo</h3>
-            <p class="text-xs text-slate-500 font-medium">Se actualizan automáticamente según los valores ingresados en la planilla</p>
-          </div>
-        </div>
-
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-          
-          <!-- Gráfico Estadístico 1: Evolución Mensual 2026 -->
-          <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm">
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-100 gap-2">
-              <div>
-                <h4 class="text-xs sm:text-sm font-extrabold text-slate-900 uppercase">Evolución Mensual Santa Cena 2026</h4>
-                <p class="text-[11px] text-slate-500">1ª Reunión, 2ª Reunión y Curva Total (Ene - Dic)</p>
-              </div>
-            </div>
-            <div class="mt-3 overflow-x-auto pb-2">
-              <div class="min-w-[480px] h-64 sm:h-72">
-                <canvas id="chartExcelAnual"></canvas>
-              </div>
-            </div>
-          </div>
-
-          <!-- Gráfico Estadístico 2: Comparativa Santa Cena vs Conteo Asistencia -->
-          <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm">
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-100 gap-2">
-              <div>
-                <h4 class="text-xs sm:text-sm font-extrabold text-slate-900 uppercase">Cenas Servidas vs Conteo Asistencia</h4>
-                <p class="text-[11px] text-slate-500">Comparativa mensual de comunión vs asistencia general</p>
-              </div>
-            </div>
-            <div class="mt-3 overflow-x-auto pb-2">
-              <div class="min-w-[480px] h-64 sm:h-72">
-                <canvas id="chartExcelComparativa"></canvas>
-              </div>
-            </div>
-          </div>
-
-          <!-- Gráfico Estadístico 3: Cenas Servidas por Sector / Área del Mes -->
-          <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm">
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-100 gap-2">
-              <div>
-                <h4 class="text-xs sm:text-sm font-extrabold text-slate-900 uppercase">Cenas Servidas por Sector (<span class="label-mes-activo">Octubre</span>)</h4>
-                <p class="text-[11px] text-slate-500">Desglose 1ª Reunión (11:00) vs 2ª Reunión (18:30)</p>
-              </div>
-            </div>
-            <div class="mt-3 overflow-x-auto pb-2">
-              <div class="min-w-[480px] h-64 sm:h-72">
-                <canvas id="chartExcelSectores"></canvas>
-              </div>
-            </div>
-          </div>
-
-          <!-- Gráfico Estadístico 4: Histórico de "No Cenaron" y Variación Mensual -->
-          <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm">
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-100 gap-2">
-              <div>
-                <h4 class="text-xs sm:text-sm font-extrabold text-slate-900 uppercase">Control Mensual "No Cenaron" (2026)</h4>
-                <p class="text-[11px] text-slate-500">Seguimiento de hermanos sin servir por mes</p>
-              </div>
-            </div>
-            <div class="mt-3 overflow-x-auto pb-2">
-              <div class="min-w-[460px] h-64 sm:h-72">
-                <canvas id="chartExcelNoCenaron"></canvas>
-              </div>
-            </div>
-          </div>
-
-        </div>
-      </div>
-
-      <!-- ======================================================== -->
-      <!-- SECCIÓN E: TABLA HISTÓRICA ANUAL 2026 (ENERO - DICIEMBRE) -->
+      <!-- SECCIÓN E: CONSOLIDADO HISTÓRICO ANUAL MES A MES (2026) -->
       <!-- ======================================================== -->
       <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        <div class="p-4 bg-slate-900 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div class="p-4 bg-slate-900 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <h3 class="text-xs sm:text-sm font-black uppercase tracking-wider">6. Consolidado Histórico Anual 2026 (Santa Cena vs Asistencia)</h3>
-            <p class="text-[11px] text-slate-300">El mes activo se actualiza automáticamente desde las tablas superiores. También puedes ajustar meses anteriores en amarillo.</p>
+            <h3 class="text-xs sm:text-sm font-black uppercase tracking-wider">6. Consolidado Histórico Mensual 2026 (Santa Cena vs Asistencia)</h3>
+            <p class="text-[11px] text-slate-300">Toca el nombre de cualquier mes para cargar su desglose arriba, o corrige directamente sus valores en las casillas amarillas.</p>
           </div>
-          <button type="button" onclick="guardarMetricas()" id="btnGuardarMetricas" class="px-4 py-2 bg-[#8b1e2d] text-white rounded-xl text-xs font-extrabold hover:bg-[#701824] shadow transition self-start sm:self-auto">
-            💾 Guardar Todo
-          </button>
+          <div class="flex items-center gap-2 self-start sm:self-auto">
+            <button type="button" onclick="guardarMetricas()" id="btnGuardarMetricas" class="px-4 py-2 bg-[#8b1e2d] text-white rounded-xl text-xs font-extrabold hover:bg-[#701824] shadow transition inline-flex items-center gap-1.5">
+              <span>💾</span> Guardar Todo
+            </button>
+            <button type="button" onclick="descargarInformePDFEstructurado()" class="px-3.5 py-2 bg-white/10 text-white rounded-xl text-xs font-bold hover:bg-white/20 transition inline-flex items-center gap-1.5">
+              <span>📄</span> Informe PDF
+            </button>
+          </div>
         </div>
 
-        <div class="overflow-x-auto">
-          <table class="w-full text-left text-xs text-slate-700 min-w-[920px]">
-            <thead class="bg-slate-50 border-b border-slate-200 text-[10px] uppercase font-extrabold text-slate-500">
-              <tr class="whitespace-nowrap">
-                <th class="py-2.5 px-3">Mes 2026</th>
-                <th class="py-2.5 px-2 text-center bg-amber-50/60 text-amber-900">SC 1° Reunión 🟨</th>
-                <th class="py-2.5 px-2 text-center bg-amber-50/60 text-amber-900">SC 2° Reunión 🟨</th>
-                <th class="py-2.5 px-2.5 text-right font-black text-[#8b1e2d]">Total SC</th>
-                <th class="py-2.5 px-2.5 text-right">Variación %</th>
-                <th class="py-2.5 px-2.5 text-right">Dif. Mes Ant.</th>
-                <th class="py-2.5 px-2 text-center bg-amber-50/60 text-red-700">No Cenaron 🟨</th>
-                <th class="py-2.5 px-2 text-center bg-amber-50/60 text-slate-800 border-l border-slate-200">Asist. 1° 🟨</th>
-                <th class="py-2.5 px-2 text-center bg-amber-50/60 text-slate-800">Asist. 2° 🟨</th>
-                <th class="py-2.5 px-2.5 text-right font-black text-slate-900">Total Asist.</th>
-                <th class="py-2.5 px-3 text-right">Dif. SC vs Asist.</th>
-              </tr>
-            </thead>
-            <tbody id="tbody-historico-anual" class="divide-y divide-slate-100 font-semibold">
-              <!-- Renderizado dinámicamente por JS -->
-            </tbody>
-            <tfoot id="tfoot-historico-anual" class="bg-slate-100 border-t-2 border-slate-300 font-black text-slate-900 text-xs">
-              <!-- Totales y Promedios anuales renderizados por JS -->
-            </tfoot>
-          </table>
+        <!-- Encabezado visible en pantallas medianas/grandes -->
+        <div class="hidden lg:grid lg:grid-cols-12 bg-slate-50 border-b border-slate-200 px-3 py-2.5 text-[10px] uppercase font-extrabold text-slate-500 items-center">
+          <div class="col-span-2">Mes 2026</div>
+          <div class="col-span-1 text-center text-amber-900">SC 1° 🟨</div>
+          <div class="col-span-1 text-center text-amber-900">SC 2° 🟨</div>
+          <div class="col-span-1 text-right text-[#8b1e2d]">Total SC</div>
+          <div class="col-span-1 text-right">Var. %</div>
+          <div class="col-span-1 text-right">Dif. Mes</div>
+          <div class="col-span-1 text-center text-red-700">No Cen. 🟨</div>
+          <div class="col-span-1 text-center border-l border-slate-200">Asist. 1° 🟨</div>
+          <div class="col-span-1 text-center">Asist. 2° 🟨</div>
+          <div class="col-span-1 text-right">Tot. Asist.</div>
+          <div class="col-span-1 text-right">Dif. Conteo</div>
+        </div>
+
+        <!-- Lista Responsiva de Meses (Tarjetas cuadradas en celular, filas en escritorio) -->
+        <div id="tbody-historico-anual" class="divide-y divide-slate-200">
+          <!-- Renderizado dinámicamente por JS -->
+        </div>
+
+        <!-- Totales y Promedios Anuales -->
+        <div id="tfoot-historico-anual" class="bg-slate-100 border-t-2 border-slate-300 p-4 space-y-3">
+          <!-- Renderizado dinámicamente por JS -->
         </div>
       </div>
 
@@ -1744,54 +1767,104 @@
       return Number(n || 0).toLocaleString('es-CL', { minimumFractionDigits: 0, maximumFractionDigits: dec });
     }
 
+    function renderFilaSectorReunionHTML(reunionKey, row, idx) {
+      const totEntr = (Number(row.band) || 0) * (Number(row.cant) || 0);
+      const bDev = row.div > 0 ? (Number(row.udev) || 0) / row.div : 0;
+      const servidas = Math.max(0, totEntr - (Number(row.udev) || 0));
+
+      return `
+        <div class="p-3 sm:px-3 sm:py-2 hover:bg-slate-50/90 transition grid grid-cols-1 sm:grid-cols-12 gap-2 sm:gap-1.5 items-center">
+          <!-- Cabecera en celular / Columna 1 en PC -->
+          <div class="sm:col-span-3 flex items-center justify-between sm:block">
+            <span class="font-extrabold text-slate-900 text-xs sm:text-[12px] leading-tight">${row.area}</span>
+            <span class="sm:hidden px-2.5 py-0.5 rounded-lg bg-rose-50 border border-rose-200 text-[#8b1e2d] font-black text-xs">
+              Servidas: <strong id="${reunionKey}-serv-mob-${idx}">${fmtNum(servidas)}</strong>
+            </span>
+          </div>
+
+          <!-- Casillas de llenado en grilla de 3 columnas perfectamente cuadradas en celular, o columnas individuales en PC -->
+          <div class="grid grid-cols-3 gap-2 sm:contents">
+            <div class="sm:col-span-2 bg-amber-50/60 sm:bg-transparent p-1.5 sm:p-0 rounded-xl border border-amber-200 sm:border-0 text-center">
+              <label class="block sm:hidden text-[9px] font-black uppercase text-amber-900 mb-0.5">Bandejas 🟨</label>
+              <input type="number" step="1" value="${row.band}" oninput="onEditFilaReunion('${reunionKey}', ${idx}, 'band', this.value)" class="w-full sm:w-16 text-center py-1.5 sm:py-1 px-1.5 rounded-lg bg-amber-50 border-2 border-amber-300 font-black text-xs text-amber-950 focus:bg-yellow-100 focus:border-amber-500 outline-none">
+            </div>
+
+            <div class="sm:col-span-1 bg-slate-50 sm:bg-transparent p-1.5 sm:p-0 rounded-xl border border-slate-200 sm:border-0 text-center">
+              <label class="block sm:hidden text-[9px] font-bold uppercase text-slate-500 mb-0.5">Cant. x Band.</label>
+              <input type="number" step="1" value="${row.cant}" oninput="onEditFilaReunion('${reunionKey}', ${idx}, 'cant', this.value)" class="w-full sm:w-12 text-center py-1.5 sm:py-1 px-1 rounded-lg bg-slate-100 border border-slate-200 font-bold text-slate-700 text-xs sm:text-[11px] outline-none">
+            </div>
+
+            <div class="hidden sm:block sm:col-span-2 text-right font-bold text-slate-700 text-xs" id="${reunionKey}-entr-${idx}">${fmtNum(totEntr)}</div>
+            <div class="hidden sm:block sm:col-span-1 text-right text-slate-500 text-xs" id="${reunionKey}-bdev-${idx}">${fmtDec(bDev, 2)}</div>
+
+            <div class="sm:col-span-2 bg-amber-50/60 sm:bg-transparent p-1.5 sm:p-0 rounded-xl border border-amber-200 sm:border-0 text-center">
+              <label class="block sm:hidden text-[9px] font-black uppercase text-amber-900 mb-0.5">Unid. Dev. 🟨</label>
+              <input type="number" step="1" value="${row.udev}" oninput="onEditFilaReunion('${reunionKey}', ${idx}, 'udev', this.value)" class="w-full sm:w-16 text-center py-1.5 sm:py-1 px-1.5 rounded-lg bg-amber-50 border-2 border-amber-300 font-black text-xs text-amber-950 focus:bg-yellow-100 focus:border-amber-500 outline-none">
+            </div>
+          </div>
+
+          <!-- Sub-barra informativa visible en celular -->
+          <div class="flex sm:hidden items-center justify-between text-[11px] text-slate-500 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-100">
+            <span>Entregado: <strong id="${reunionKey}-entr-mob-${idx}" class="text-slate-800">${fmtNum(totEntr)}</strong> unid.</span>
+            <span>Band. Dev.: <strong id="${reunionKey}-bdev-mob-${idx}" class="text-slate-700">${fmtDec(bDev, 2)}</strong></span>
+          </div>
+
+          <!-- Total Servidas visible en PC -->
+          <div id="${reunionKey}-serv-${idx}" class="hidden sm:block sm:col-span-1 text-right font-black text-[#8b1e2d] text-xs">${fmtNum(servidas)}</div>
+        </div>
+      `;
+    }
+
     function renderTablasReunionesDOM(det) {
       const tbody11 = document.getElementById('tbody-reunion-11');
-      tbody11.innerHTML = det.r11.map((row, idx) => {
-        const totEntr = (Number(row.band) || 0) * (Number(row.cant) || 0);
-        const bDev = row.div > 0 ? (Number(row.udev) || 0) / row.div : 0;
-        const servidas = Math.max(0, totEntr - (Number(row.udev) || 0));
-        return `
-          <tr class="hover:bg-slate-50/80 transition">
-            <td class="py-2 px-2.5 font-bold text-slate-800">${row.area}</td>
-            <td class="py-1.5 px-2 text-center bg-amber-50/40">
-              <input type="number" step="1" value="${row.band}" oninput="onEditFilaReunion('r11', ${idx}, 'band', this.value)" class="w-16 text-center py-1 px-1.5 rounded-lg bg-amber-50 border-2 border-amber-300 font-black text-amber-950 focus:bg-yellow-100 focus:border-amber-500 outline-none">
-            </td>
-            <td class="py-1.5 px-1.5 text-center">
-              <input type="number" step="1" value="${row.cant}" oninput="onEditFilaReunion('r11', ${idx}, 'cant', this.value)" class="w-12 text-center py-1 px-1 rounded bg-slate-100 border border-slate-200 font-bold text-slate-600 text-[11px] outline-none">
-            </td>
-            <td id="r11-entr-${idx}" class="py-2 px-2 text-right font-bold text-slate-700">${fmtNum(totEntr)}</td>
-            <td id="r11-bdev-${idx}" class="py-2 px-2 text-right text-slate-500">${fmtDec(bDev, 3)}</td>
-            <td class="py-1.5 px-2 text-center bg-amber-50/40">
-              <input type="number" step="1" value="${row.udev}" oninput="onEditFilaReunion('r11', ${idx}, 'udev', this.value)" class="w-16 text-center py-1 px-1.5 rounded-lg bg-amber-50 border-2 border-amber-300 font-black text-amber-950 focus:bg-yellow-100 focus:border-amber-500 outline-none">
-            </td>
-            <td id="r11-serv-${idx}" class="py-2 px-2.5 text-right font-black text-[#8b1e2d]">${fmtNum(servidas)}</td>
-          </tr>
-        `;
-      }).join('');
-
+      if (tbody11) {
+        tbody11.innerHTML = det.r11.map((row, idx) => renderFilaSectorReunionHTML('r11', row, idx)).join('');
+      }
       const tbody18 = document.getElementById('tbody-reunion-18');
-      tbody18.innerHTML = det.r18.map((row, idx) => {
-        const totEntr = (Number(row.band) || 0) * (Number(row.cant) || 0);
-        const bDev = row.div > 0 ? (Number(row.udev) || 0) / row.div : 0;
-        const servidas = Math.max(0, totEntr - (Number(row.udev) || 0));
+      if (tbody18) {
+        tbody18.innerHTML = det.r18.map((row, idx) => renderFilaSectorReunionHTML('r18', row, idx)).join('');
+      }
+    }
+
+    function renderBarraMesesGuardados() {
+      const container = document.getElementById('barraMesesGuardados');
+      if (!container || !excelState) return;
+
+      container.innerHTML = excelState.historicoAnual.map(m => {
+        const totSc = (Number(m.sc1) || 0) + (Number(m.sc2) || 0);
+        const activo = m.mes === excelState.mesActivo;
+        const tieneDatos = totSc > 0;
         return `
-          <tr class="hover:bg-slate-50/80 transition">
-            <td class="py-2 px-2.5 font-bold text-slate-800">${row.area}</td>
-            <td class="py-1.5 px-2 text-center bg-amber-50/40">
-              <input type="number" step="1" value="${row.band}" oninput="onEditFilaReunion('r18', ${idx}, 'band', this.value)" class="w-16 text-center py-1 px-1.5 rounded-lg bg-amber-50 border-2 border-amber-300 font-black text-amber-950 focus:bg-yellow-100 focus:border-amber-500 outline-none">
-            </td>
-            <td class="py-1.5 px-1.5 text-center">
-              <input type="number" step="1" value="${row.cant}" oninput="onEditFilaReunion('r18', ${idx}, 'cant', this.value)" class="w-12 text-center py-1 px-1 rounded bg-slate-100 border border-slate-200 font-bold text-slate-600 text-[11px] outline-none">
-            </td>
-            <td id="r18-entr-${idx}" class="py-2 px-2 text-right font-bold text-slate-700">${fmtNum(totEntr)}</td>
-            <td id="r18-bdev-${idx}" class="py-2 px-2 text-right text-slate-500">${fmtDec(bDev, 3)}</td>
-            <td class="py-1.5 px-2 text-center bg-amber-50/40">
-              <input type="number" step="1" value="${row.udev}" oninput="onEditFilaReunion('r18', ${idx}, 'udev', this.value)" class="w-16 text-center py-1 px-1.5 rounded-lg bg-amber-50 border-2 border-amber-300 font-black text-amber-950 focus:bg-yellow-100 focus:border-amber-500 outline-none">
-            </td>
-            <td id="r18-serv-${idx}" class="py-2 px-2.5 text-right font-black text-[#8b1e2d]">${fmtNum(servidas)}</td>
-          </tr>
+          <button type="button" onclick="cambiarMesExcel('${m.mes}')" class="px-3 py-1.5 rounded-xl text-xs font-extrabold whitespace-nowrap transition flex items-center gap-1.5 border ${
+            activo
+              ? 'bg-[#8b1e2d] text-white border-[#8b1e2d] shadow-sm'
+              : (tieneDatos ? 'bg-white text-slate-800 border-slate-200 hover:border-[#8b1e2d]/50' : 'bg-slate-50 text-slate-400 border-slate-200 hover:text-slate-700')
+          }">
+            <span>${m.mes.slice(0, 3)}</span>
+            <span class="px-1.5 py-0.2 rounded text-[10px] ${activo ? 'bg-black/25 text-white' : (tieneDatos ? 'bg-rose-50 text-[#8b1e2d]' : 'bg-slate-200/70 text-slate-500')}">
+              ${tieneDatos ? fmtNum(totSc) : 'Vacío'}
+            </span>
+          </button>
         `;
       }).join('');
+    }
+
+    function mostrarEstadoGuardado(mensaje, tipo = 'ok') {
+      const banner = document.getElementById('bannerEstadoGuardado');
+      const texto = document.getElementById('textoEstadoGuardado');
+      if (!banner || !texto) return;
+
+      texto.textContent = mensaje;
+      if (tipo === 'pending') {
+        banner.className = 'inline-flex items-center gap-2 font-bold text-amber-800 bg-amber-50 border border-amber-300 px-3 py-1.5 rounded-xl';
+        banner.firstElementChild.textContent = '✏️';
+      } else if (tipo === 'error') {
+        banner.className = 'inline-flex items-center gap-2 font-bold text-red-700 bg-red-50 border border-red-200 px-3 py-1.5 rounded-xl';
+        banner.firstElementChild.textContent = '⚠️';
+      } else {
+        banner.className = 'inline-flex items-center gap-2 font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl';
+        banner.firstElementChild.textContent = '✅';
+      }
     }
 
     function cargarMesEnFormulario(mesNombre) {
@@ -1840,6 +1913,7 @@
       const det = excelState.mesesDetalle[mes];
       if (!det || !det[reunionKey] || !det[reunionKey][idx]) return;
       det[reunionKey][idx][field] = Number(val) || 0;
+      mostrarEstadoGuardado(`Editando ${mes}... Presiona "Guardar Todo" para confirmar los cambios en la base de datos.`, 'pending');
       recalcularTodoExcel(true);
     }
 
@@ -1858,7 +1932,9 @@
           document.getElementById('excel_conteo_18').value = num;
         }
       }
-      renderTablaHistoricoAnual(idx, field);
+      mostrarEstadoGuardado(`Mes de ${row.mes} modificado. Presiona "Guardar Todo" para guardar los cambios.`, 'pending');
+      try { localStorage.setItem('santa_cena_excel_state_v2', JSON.stringify(excelState)); } catch (_) {}
+      renderTablaHistoricoAnual();
       actualizarGraficosExcel();
     }
 
@@ -1902,12 +1978,18 @@
         t11Udev += Number(row.udev) || 0;
         t11Serv += serv;
 
-        const elEntr = document.getElementById(`r11-entr-${idx}`);
-        const elBdev = document.getElementById(`r11-bdev-${idx}`);
-        const elServ = document.getElementById(`r11-serv-${idx}`);
-        if (elEntr) elEntr.textContent = fmtNum(entr);
-        if (elBdev) elBdev.textContent = fmtDec(bdev, 3);
-        if (elServ) elServ.textContent = fmtNum(serv);
+        ['r11-entr-', 'r11-entr-mob-'].forEach(p => {
+          const el = document.getElementById(`${p}${idx}`);
+          if (el) el.textContent = fmtNum(entr);
+        });
+        ['r11-bdev-', 'r11-bdev-mob-'].forEach(p => {
+          const el = document.getElementById(`${p}${idx}`);
+          if (el) el.textContent = fmtDec(bdev, 2);
+        });
+        ['r11-serv-', 'r11-serv-mob-'].forEach(p => {
+          const el = document.getElementById(`${p}${idx}`);
+          if (el) el.textContent = fmtNum(serv);
+        });
       });
 
       document.getElementById('tot11-band').textContent = fmtNum(t11Band);
@@ -1938,12 +2020,18 @@
         t18Udev += Number(row.udev) || 0;
         t18Serv += serv;
 
-        const elEntr = document.getElementById(`r18-entr-${idx}`);
-        const elBdev = document.getElementById(`r18-bdev-${idx}`);
-        const elServ = document.getElementById(`r18-serv-${idx}`);
-        if (elEntr) elEntr.textContent = fmtNum(entr);
-        if (elBdev) elBdev.textContent = fmtDec(bdev, 3);
-        if (elServ) elServ.textContent = fmtNum(serv);
+        ['r18-entr-', 'r18-entr-mob-'].forEach(p => {
+          const el = document.getElementById(`${p}${idx}`);
+          if (el) el.textContent = fmtNum(entr);
+        });
+        ['r18-bdev-', 'r18-bdev-mob-'].forEach(p => {
+          const el = document.getElementById(`${p}${idx}`);
+          if (el) el.textContent = fmtDec(bdev, 2);
+        });
+        ['r18-serv-', 'r18-serv-mob-'].forEach(p => {
+          const el = document.getElementById(`${p}${idx}`);
+          if (el) el.textContent = fmtNum(serv);
+        });
       });
 
       document.getElementById('tot18-band').textContent = fmtNum(t18Band);
@@ -1957,7 +2045,7 @@
       // Saldo después del 2do culto
       const saldo18Unid = Math.max(0, saldo11Unid - t18Serv);
       const saldo18Band = saldo18Unid / 40;
-      document.getElementById('saldo18-band').textContent = `${fmtDec(saldo18Band, 3)} band.`;
+      document.getElementById('saldo18-band').textContent = `${fmtDec(saldo18Band, 2)} band.`;
       document.getElementById('saldo18-unid').textContent = `${fmtNum(saldo18Unid)} unid.`;
 
       // 4. Inputs inferiores y Conciliación
@@ -1971,7 +2059,6 @@
       det.vinoUnidades = Number(document.getElementById('vino_unidades').value) || 0;
 
       const histRow = excelState.historicoAnual.find(h => h.mes === mes);
-      // Si la planilla de sectores tiene datos (>0) o el usuario está editando, sincronizar con el histórico anual
       const sc1Final = (t11Serv > 0 || fromUserEdit) ? t11Serv : (histRow?.sc1 || 0);
       const sc2Final = (t18Serv > 0 || fromUserEdit) ? t18Serv : (histRow?.sc2 || 0);
       const noCenTotal = det.noCenaron11 + det.noCenaron18;
@@ -2030,6 +2117,10 @@
       document.getElementById('card-diferencia').textContent = difScConteo > 0 ? `+${fmtNum(difScConteo)}` : fmtNum(difScConteo);
       document.getElementById('card-conciliacion-sub').textContent = `Sobrante: ${fmtNum(saldo18Unid)} unid. (${fmtDec(saldo18Band, 2)} band.)`;
 
+      if (fromUserEdit) {
+        try { localStorage.setItem('santa_cena_excel_state_v2', JSON.stringify(excelState)); } catch (_) {}
+      }
+
       renderTablaHistoricoAnual();
       actualizarGraficosExcel();
     }
@@ -2038,6 +2129,8 @@
       const tbody = document.getElementById('tbody-historico-anual');
       const tfoot = document.getElementById('tfoot-historico-anual');
       if (!tbody || !excelState) return;
+
+      renderBarraMesesGuardados();
 
       let sumSc1 = 0, sumSc2 = 0, sumScTot = 0, sumNoCen = 0;
       let sumAs1 = 0, sumAs2 = 0, sumAsTot = 0;
@@ -2067,73 +2160,108 @@
         }
 
         const isMesActivo = row.mes === excelState.mesActivo;
-        const varColor = varPct > 0 ? 'text-emerald-700 bg-emerald-50' : (varPct < 0 ? 'text-red-700 bg-red-50' : 'text-slate-400');
+        const varColor = varPct > 0 ? 'text-emerald-700 bg-emerald-50 border-emerald-200' : (varPct < 0 ? 'text-red-700 bg-red-50 border-red-200' : 'text-slate-400 bg-slate-50 border-slate-200');
 
         return `
-          <tr class="${isMesActivo ? 'bg-rose-50/70 font-bold' : 'hover:bg-slate-50'} transition">
-            <td class="py-2 px-3 flex items-center gap-1.5">
-              <button type="button" onclick="cambiarMesExcel('${row.mes}')" class="text-left font-extrabold ${isMesActivo ? 'text-[#8b1e2d] underline' : 'text-slate-800 hover:text-[#8b1e2d]'}">
-                ${row.mes} ${isMesActivo ? '★' : ''}
+          <div class="p-3 sm:p-3.5 lg:px-3 lg:py-2 ${isMesActivo ? 'bg-rose-50/70' : 'hover:bg-slate-50'} transition grid grid-cols-1 lg:grid-cols-12 gap-2.5 lg:gap-1.5 items-center">
+            <!-- Cabecera del mes en celular / Columna 1-2 en PC -->
+            <div class="lg:col-span-2 flex items-center justify-between">
+              <button type="button" onclick="cambiarMesExcel('${row.mes}')" class="text-left font-black text-sm lg:text-xs flex items-center gap-1.5 ${isMesActivo ? 'text-[#8b1e2d] underline' : 'text-slate-900 hover:text-[#8b1e2d]'}">
+                <span>${row.mes}</span>
+                ${isMesActivo ? '<span class="px-1.5 py-0.5 rounded bg-[#8b1e2d] text-white text-[9px] uppercase">Activo</span>' : ''}
               </button>
-            </td>
-            <td class="py-1.5 px-2 text-center bg-amber-50/30">
-              <input type="number" value="${row.sc1}" onchange="onEditHistoricoAnual(${idx}, 'sc1', this.value)" class="w-20 text-center py-1 px-1.5 rounded bg-amber-50 border border-amber-300 font-bold text-slate-900">
-            </td>
-            <td class="py-1.5 px-2 text-center bg-amber-50/30">
-              <input type="number" value="${row.sc2}" onchange="onEditHistoricoAnual(${idx}, 'sc2', this.value)" class="w-20 text-center py-1 px-1.5 rounded bg-amber-50 border border-amber-300 font-bold text-slate-900">
-            </td>
-            <td class="py-2 px-2.5 text-right font-black text-[#8b1e2d]">${tieneDatos ? fmtNum(totalSc) : '—'}</td>
-            <td class="py-2 px-2.5 text-right">
-              ${tieneDatos ? `<span class="px-1.5 py-0.5 rounded text-[11px] font-black ${varColor}">${varPct > 0 ? '+' : ''}${fmtDec(varPct, 1)}%</span>` : '—'}
-            </td>
-            <td class="py-2 px-2.5 text-right font-bold ${difMesAnt > 0 ? 'text-emerald-700' : (difMesAnt < 0 ? 'text-red-600' : 'text-slate-400')}">
-              ${tieneDatos ? (difMesAnt > 0 ? `+${fmtNum(difMesAnt)}` : fmtNum(difMesAnt)) : '—'}
-            </td>
-            <td class="py-1.5 px-2 text-center bg-amber-50/30">
-              <input type="number" value="${row.noCenaron}" onchange="onEditHistoricoAnual(${idx}, 'noCenaron', this.value)" class="w-14 text-center py-1 px-1 rounded bg-amber-50 border border-amber-300 font-black text-red-700">
-            </td>
-            <td class="py-1.5 px-2 text-center bg-amber-50/30 border-l border-slate-200">
-              <input type="number" value="${row.asist1}" onchange="onEditHistoricoAnual(${idx}, 'asist1', this.value)" class="w-20 text-center py-1 px-1.5 rounded bg-amber-50 border border-amber-300 font-bold text-slate-800">
-            </td>
-            <td class="py-1.5 px-2 text-center bg-amber-50/30">
-              <input type="number" value="${row.asist2}" onchange="onEditHistoricoAnual(${idx}, 'asist2', this.value)" class="w-20 text-center py-1 px-1.5 rounded bg-amber-50 border border-amber-300 font-bold text-slate-800">
-            </td>
-            <td class="py-2 px-2.5 text-right font-black text-slate-900">${totalAs > 0 ? fmtNum(totalAs) : '—'}</td>
-            <td class="py-2 px-3 text-right font-bold ${difScAsist < 0 ? 'text-red-600' : 'text-slate-700'}">
+              <div class="flex lg:hidden items-center gap-1.5">
+                ${tieneDatos ? `<span class="px-2 py-0.5 rounded-lg border text-[10px] font-black ${varColor}">${varPct > 0 ? '+' : ''}${fmtDec(varPct, 1)}%</span>` : ''}
+                <span class="px-2.5 py-0.5 rounded-lg bg-rose-100/80 text-[#8b1e2d] font-black text-xs">
+                  SC: ${tieneDatos ? fmtNum(totalSc) : '0'}
+                </span>
+              </div>
+            </div>
+
+            <!-- Celdas editables en grilla cuadrada de 3 columnas en celular, o columnas directas en PC -->
+            <div class="grid grid-cols-3 sm:grid-cols-5 gap-2 lg:contents">
+              <div class="lg:col-span-1 bg-amber-50/60 lg:bg-transparent p-1.5 lg:p-0 rounded-xl border border-amber-200 lg:border-0 text-center">
+                <label class="block lg:hidden text-[9px] font-black uppercase text-amber-900 mb-0.5">SC 1° 🟨</label>
+                <input type="number" value="${row.sc1}" onchange="onEditHistoricoAnual(${idx}, 'sc1', this.value)" class="w-full lg:w-20 text-center py-1 px-1.5 rounded-lg bg-amber-50 border border-amber-300 font-black text-xs text-slate-900">
+              </div>
+
+              <div class="lg:col-span-1 bg-amber-50/60 lg:bg-transparent p-1.5 lg:p-0 rounded-xl border border-amber-200 lg:border-0 text-center">
+                <label class="block lg:hidden text-[9px] font-black uppercase text-amber-900 mb-0.5">SC 2° 🟨</label>
+                <input type="number" value="${row.sc2}" onchange="onEditHistoricoAnual(${idx}, 'sc2', this.value)" class="w-full lg:w-20 text-center py-1 px-1.5 rounded-lg bg-amber-50 border border-amber-300 font-black text-xs text-slate-900">
+              </div>
+
+              <div class="hidden lg:block lg:col-span-1 text-right font-black text-[#8b1e2d] text-xs">${tieneDatos ? fmtNum(totalSc) : '—'}</div>
+              <div class="hidden lg:block lg:col-span-1 text-right">
+                ${tieneDatos ? `<span class="px-1.5 py-0.5 rounded border text-[10px] font-black ${varColor}">${varPct > 0 ? '+' : ''}${fmtDec(varPct, 1)}%</span>` : '—'}
+              </div>
+              <div class="hidden lg:block lg:col-span-1 text-right font-bold text-xs ${difMesAnt > 0 ? 'text-emerald-700' : (difMesAnt < 0 ? 'text-red-600' : 'text-slate-400')}">
+                ${tieneDatos ? (difMesAnt > 0 ? `+${fmtNum(difMesAnt)}` : fmtNum(difMesAnt)) : '—'}
+              </div>
+
+              <div class="lg:col-span-1 bg-red-50/60 lg:bg-transparent p-1.5 lg:p-0 rounded-xl border border-red-200 lg:border-0 text-center">
+                <label class="block lg:hidden text-[9px] font-black uppercase text-red-700 mb-0.5">No Cen. 🟨</label>
+                <input type="number" value="${row.noCenaron}" onchange="onEditHistoricoAnual(${idx}, 'noCenaron', this.value)" class="w-full lg:w-14 text-center py-1 px-1 rounded-lg bg-amber-50 border border-amber-300 font-black text-xs text-red-700">
+              </div>
+
+              <div class="lg:col-span-1 bg-amber-50/60 lg:bg-transparent p-1.5 lg:p-0 rounded-xl border border-amber-200 lg:border-0 text-center">
+                <label class="block lg:hidden text-[9px] font-black uppercase text-slate-600 mb-0.5">Asist. 1° 🟨</label>
+                <input type="number" value="${row.asist1}" onchange="onEditHistoricoAnual(${idx}, 'asist1', this.value)" class="w-full lg:w-20 text-center py-1 px-1.5 rounded-lg bg-amber-50 border border-amber-300 font-bold text-xs text-slate-800">
+              </div>
+
+              <div class="lg:col-span-1 bg-amber-50/60 lg:bg-transparent p-1.5 lg:p-0 rounded-xl border border-amber-200 lg:border-0 text-center">
+                <label class="block lg:hidden text-[9px] font-black uppercase text-slate-600 mb-0.5">Asist. 2° 🟨</label>
+                <input type="number" value="${row.asist2}" onchange="onEditHistoricoAnual(${idx}, 'asist2', this.value)" class="w-full lg:w-20 text-center py-1 px-1.5 rounded-lg bg-amber-50 border border-amber-300 font-bold text-xs text-slate-800">
+              </div>
+            </div>
+
+            <!-- Barra inferior de resumen en celular -->
+            <div class="flex lg:hidden items-center justify-between text-[11px] text-slate-600 bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-200">
+              <span>Tot. Asistencia: <strong class="text-slate-900">${totalAs > 0 ? fmtNum(totalAs) : '—'}</strong></span>
+              <span>Dif. Conteo: <strong class="${difScAsist < 0 ? 'text-red-600' : 'text-slate-800'}">${(tieneDatos || totalAs > 0) ? (difScAsist > 0 ? `+${fmtNum(difScAsist)}` : fmtNum(difScAsist)) : '—'}</strong></span>
+            </div>
+
+            <!-- Columnas finales en PC -->
+            <div class="hidden lg:block lg:col-span-1 text-right font-black text-slate-900 text-xs">${totalAs > 0 ? fmtNum(totalAs) : '—'}</div>
+            <div class="hidden lg:block lg:col-span-1 text-right font-bold text-xs ${difScAsist < 0 ? 'text-red-600' : 'text-slate-700'}">
               ${(tieneDatos || totalAs > 0) ? (difScAsist > 0 ? `+${fmtNum(difScAsist)}` : fmtNum(difScAsist)) : '—'}
-            </td>
-          </tr>
+            </div>
+          </div>
         `;
       }).join('');
 
       const divisor = mesesConDatos || 1;
       tfoot.innerHTML = `
-        <tr class="bg-slate-200/80 text-slate-900">
-          <td class="py-2.5 px-3 uppercase font-black">Total Anual (${mesesConDatos} meses)</td>
-          <td class="py-2.5 px-2 text-center font-black">${fmtNum(sumSc1)}</td>
-          <td class="py-2.5 px-2 text-center font-black">${fmtNum(sumSc2)}</td>
-          <td class="py-2.5 px-2.5 text-right font-black text-sm text-[#8b1e2d]">${fmtNum(sumScTot)}</td>
-          <td class="py-2.5 px-2.5 text-right text-slate-400">—</td>
-          <td class="py-2.5 px-2.5 text-right text-slate-400">—</td>
-          <td class="py-2.5 px-2 text-center font-black text-red-700">${fmtNum(sumNoCen)}</td>
-          <td class="py-2.5 px-2 text-center font-black border-l border-slate-300">${fmtNum(sumAs1)}</td>
-          <td class="py-2.5 px-2 text-center font-black">${fmtNum(sumAs2)}</td>
-          <td class="py-2.5 px-2.5 text-right font-black text-sm">${fmtNum(sumAsTot)}</td>
-          <td class="py-2.5 px-3 text-right font-black">${fmtNum(sumAsTot - sumScTot)}</td>
-        </tr>
-        <tr class="bg-rose-50/90 text-[#8b1e2d] border-t border-rose-200">
-          <td class="py-2.5 px-3 uppercase font-black">Promedio Mensual</td>
-          <td class="py-2.5 px-2 text-center font-black">${fmtDec(sumSc1 / divisor, 1)}</td>
-          <td class="py-2.5 px-2 text-center font-black">${fmtDec(sumSc2 / divisor, 1)}</td>
-          <td class="py-2.5 px-2.5 text-right font-black text-sm">${fmtDec(sumScTot / divisor, 1)}</td>
-          <td class="py-2.5 px-2.5 text-right text-slate-400">—</td>
-          <td class="py-2.5 px-2.5 text-right text-slate-400">—</td>
-          <td class="py-2.5 px-2 text-center font-black text-red-700">${fmtDec(sumNoCen / divisor, 1)}</td>
-          <td class="py-2.5 px-2 text-center font-black border-l border-rose-200">${fmtDec(sumAs1 / divisor, 1)}</td>
-          <td class="py-2.5 px-2 text-center font-black">${fmtDec(sumAs2 / divisor, 1)}</td>
-          <td class="py-2.5 px-2.5 text-right font-black text-sm">${fmtDec(sumAsTot / divisor, 1)}</td>
-          <td class="py-2.5 px-3 text-right font-black">${fmtDec((sumAsTot - sumScTot) / divisor, 1)}</td>
-        </tr>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+          <div class="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm space-y-2">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-1.5">
+              <span class="uppercase font-black text-slate-800">TOTAL ACUMULADO 2026 (${mesesConDatos} meses)</span>
+              <span class="text-sm font-black text-[#8b1e2d]">${fmtNum(sumScTot)} cenas</span>
+            </div>
+            <div class="grid grid-cols-3 gap-2 text-[11px]">
+              <div>SC 1°: <strong class="text-slate-900">${fmtNum(sumSc1)}</strong></div>
+              <div>SC 2°: <strong class="text-slate-900">${fmtNum(sumSc2)}</strong></div>
+              <div>No Cenaron: <strong class="text-red-600">${fmtNum(sumNoCen)}</strong></div>
+              <div>Asist. 1°: <strong class="text-slate-900">${fmtNum(sumAs1)}</strong></div>
+              <div>Asist. 2°: <strong class="text-slate-900">${fmtNum(sumAs2)}</strong></div>
+              <div>Tot. Asist.: <strong class="text-slate-900">${fmtNum(sumAsTot)}</strong></div>
+            </div>
+          </div>
+
+          <div class="bg-rose-50/80 p-3.5 rounded-xl border border-rose-200 shadow-sm space-y-2 text-[#8b1e2d]">
+            <div class="flex items-center justify-between border-b border-rose-200/60 pb-1.5">
+              <span class="uppercase font-black">PROMEDIO MENSUAL 2026</span>
+              <span class="text-sm font-black">${fmtDec(sumScTot / divisor, 1)} cenas/mes</span>
+            </div>
+            <div class="grid grid-cols-3 gap-2 text-[11px]">
+              <div>Prom. 1°: <strong>${fmtDec(sumSc1 / divisor, 1)}</strong></div>
+              <div>Prom. 2°: <strong>${fmtDec(sumSc2 / divisor, 1)}</strong></div>
+              <div>No Cenaron: <strong class="text-red-700">${fmtDec(sumNoCen / divisor, 1)}</strong></div>
+              <div>Asist. 1°: <strong>${fmtDec(sumAs1 / divisor, 1)}</strong></div>
+              <div>Asist. 2°: <strong>${fmtDec(sumAs2 / divisor, 1)}</strong></div>
+              <div>Prom. Asist.: <strong>${fmtDec(sumAsTot / divisor, 1)}</strong></div>
+            </div>
+          </div>
+        </div>
       `;
     }
 
@@ -2166,6 +2294,7 @@
           options: {
             responsive: true,
             maintainAspectRatio: false,
+            animation: false,
             plugins: { legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11, weight: 'bold' } } } },
             scales: { y: { beginAtZero: true, grid: { color: '#f1f5f9' } }, x: { grid: { display: false } } }
           }
@@ -2188,6 +2317,7 @@
           options: {
             responsive: true,
             maintainAspectRatio: false,
+            animation: false,
             plugins: { legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11, weight: 'bold' } } } },
             scales: { y: { beginAtZero: true, grid: { color: '#f1f5f9' } }, x: { grid: { display: false } } }
           }
@@ -2215,6 +2345,7 @@
           options: {
             responsive: true,
             maintainAspectRatio: false,
+            animation: false,
             plugins: { legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11, weight: 'bold' } } } },
             scales: { y: { beginAtZero: true, grid: { color: '#f1f5f9' } }, x: { grid: { display: false }, ticks: { font: { size: 10 } } } }
           }
@@ -2236,6 +2367,7 @@
           options: {
             responsive: true,
             maintainAspectRatio: false,
+            animation: false,
             plugins: { legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11, weight: 'bold' } } } },
             scales: { y: { beginAtZero: true, ticks: { stepSize: 2 }, grid: { color: '#f1f5f9' } }, x: { grid: { display: false } } }
           }
@@ -2244,15 +2376,28 @@
     }
 
     async function cargarMetricasCulto() {
+      let localBackup = null;
+      try {
+        const raw = localStorage.getItem('santa_cena_excel_state_v2');
+        if (raw) localBackup = JSON.parse(raw);
+      } catch (_) {}
+
       try {
         const res = await fetch('/admin/metricas_culto', { headers: getAuthHeaders() });
         const data = await res.json();
         const m = data?.metricas || {};
 
-        document.getElementById('input_observaciones').value = m.observaciones || '';
+        if (m.observaciones !== undefined) {
+          document.getElementById('input_observaciones').value = m.observaciones || '';
+        }
 
         if (m.excel_data && m.excel_data.historicoAnual && m.excel_data.mesesDetalle) {
           excelState = m.excel_data;
+          try { localStorage.setItem('santa_cena_excel_state_v2', JSON.stringify(excelState)); } catch (_) {}
+          mostrarEstadoGuardado('Datos sincronizados desde la base de datos. Selecciona cualquier mes para consultar o corregir.', 'ok');
+        } else if (localBackup && localBackup.historicoAnual && localBackup.mesesDetalle) {
+          excelState = localBackup;
+          mostrarEstadoGuardado('Datos recuperados desde memoria local. Presiona "Guardar Todo" para respaldar en el servidor.', 'ok');
         } else {
           excelState = getDefaultExcelState();
         }
@@ -2260,10 +2405,12 @@
         cargarMesEnFormulario(excelState.mesActivo || 'Octubre');
       } catch (e) {
         console.error(e);
-        if (!excelState) {
+        if (localBackup && localBackup.historicoAnual) {
+          excelState = localBackup;
+        } else if (!excelState) {
           excelState = getDefaultExcelState();
-          cargarMesEnFormulario('Octubre');
         }
+        cargarMesEnFormulario(excelState.mesActivo || 'Octubre');
       }
     }
 
@@ -2275,6 +2422,11 @@
       const mes = excelState.mesActivo;
       const det = excelState.mesesDetalle[mes];
       const histRow = excelState.historicoAnual.find(h => h.mes === mes) || {};
+
+      // Guardar inmediatamente en respaldo local del navegador
+      try {
+        localStorage.setItem('santa_cena_excel_state_v2', JSON.stringify(excelState));
+      } catch (_) {}
 
       const getServArea = (arr, namePart) => {
         const r = arr.find(x => x.area.toLowerCase().includes(namePart));
@@ -2299,8 +2451,8 @@
 
       const btn1 = document.getElementById('btnGuardarMetricas');
       const btn2 = document.getElementById('btnGuardarMetricasTop');
-      if (btn1) { btn1.disabled = true; btn1.textContent = 'Guardando...'; }
-      if (btn2) { btn2.disabled = true; btn2.textContent = 'Guardando...'; }
+      if (btn1) { btn1.disabled = true; btn1.textContent = '⏳ Guardando...'; }
+      if (btn2) { btn2.disabled = true; btn2.innerHTML = '<span>⏳</span> <span>Guardando...</span>'; }
 
       try {
         const res = await fetch('/admin/metricas_culto', {
@@ -2309,14 +2461,382 @@
           body: JSON.stringify(payload)
         });
         const data = await res.json();
-        if (!res.ok) throw new Error(data.message || 'Error al guardar');
-        alert('✅ Planilla Excel y Estadísticas guardadas exitosamente en la base de datos.');
+        if (!res.ok) throw new Error(data.message || 'Error al guardar en el servidor');
+
+        renderTablaHistoricoAnual();
+        actualizarGraficosExcel();
+        const horaStr = new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
+        mostrarEstadoGuardado(`Guardado exitoso (${mes} 2026 a las ${horaStr}). Los gráficos y el histórico anual han sido actualizados.`, 'ok');
       } catch (err) {
-        alert(err.message);
+        mostrarEstadoGuardado(`Guardado en memoria local (${mes} 2026). Aviso de red: ${err.message}`, 'error');
       } finally {
-        if (btn1) { btn1.disabled = false; btn1.textContent = '💾 Guardar Todo'; }
-        if (btn2) { btn2.disabled = false; btn2.innerHTML = '<span>💾</span> Guardar Planilla y Estadísticas'; }
+        if (btn1) { btn1.disabled = false; btn1.innerHTML = '<span>💾</span> Guardar Todo'; }
+        if (btn2) { btn2.disabled = false; btn2.innerHTML = '<span>💾</span> <span>Guardar Todo e Incluir en Gráficos</span>'; }
       }
+    }
+
+    // =========================================================================
+    // 5. GENERADOR DE INFORME EJECUTIVO PDF ESTRUCTURADO Y DETALLADO (MULTI-PÁGINA)
+    // =========================================================================
+    async function descargarInformePDFEstructurado() {
+      if (!excelState) {
+        excelState = getDefaultExcelState();
+        cargarMesEnFormulario('Octubre');
+      }
+      recalcularTodoExcel(false);
+      actualizarGraficosExcel();
+
+      const jspdfLib = window.jspdf;
+      if (!jspdfLib || !jspdfLib.jsPDF) {
+        alert('Cargando librería de informes PDF. Por favor intenta nuevamente en 2 segundos.');
+        return;
+      }
+
+      const { jsPDF } = jspdfLib;
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 14;
+
+      const mes = excelState.mesActivo || 'Octubre';
+      const det = excelState.mesesDetalle[mes] || crearPlantillaMesVacia();
+      const idxMes = excelState.historicoAnual.findIndex(m => m.mes === mes);
+      const histRow = excelState.historicoAnual[idxMes] || { sc1: 0, sc2: 0, noCenaron: 0, asist1: 0, asist2: 0 };
+
+      // Cálculos del mes activo y comparativas contra mes anterior y promedio anual
+      const sc1 = Number(histRow.sc1) || 0;
+      const sc2 = Number(histRow.sc2) || 0;
+      const totalSc = sc1 + sc2;
+      const asist1 = Number(histRow.asist1) || 0;
+      const asist2 = Number(histRow.asist2) || 0;
+      const totalAsist = asist1 + asist2;
+      const noCenTotal = (Number(det.noCenaron11) || 0) + (Number(det.noCenaron18) || 0);
+      const difConteo = totalAsist - totalSc;
+
+      const prevNombre = idxMes > 0 ? excelState.historicoAnual[idxMes - 1].mes : 'Diciembre 2025';
+      const prevTotalSc = idxMes > 0
+        ? ((Number(excelState.historicoAnual[idxMes - 1].sc1) || 0) + (Number(excelState.historicoAnual[idxMes - 1].sc2) || 0))
+        : (excelState.dic2025Total || 5726);
+      const difVsPrev = prevTotalSc > 0 ? (totalSc - prevTotalSc) : 0;
+      const pctVsPrev = prevTotalSc > 0 ? ((difVsPrev / prevTotalSc) * 100) : 0;
+
+      const mesesActivos = excelState.historicoAnual.filter(m => ((Number(m.sc1) || 0) + (Number(m.sc2) || 0)) > 0);
+      const numMesesAct = mesesActivos.length || 1;
+      const promAnualSc = mesesActivos.reduce((acc, m) => acc + (Number(m.sc1) || 0) + (Number(m.sc2) || 0), 0) / numMesesAct;
+      const difVsProm = totalSc - promAnualSc;
+      const pctVsProm = promAnualSc > 0 ? ((difVsProm / promAnualSc) * 100) : 0;
+
+      // Preparación y saldos
+      const sabTotal = (Number(det.prep.sabBand) || 0) * (Number(det.prep.sabCant) || 0);
+      const pulpTotal = (Number(det.prep.pulpBand) || 0) * (Number(det.prep.pulpCant) || 0);
+      const domTotal = (Number(det.prep.domBand) || 0) * (Number(det.prep.domCant) || 0);
+      const granTotalPrep = sabTotal + pulpTotal + domTotal;
+      const saldo11Unid = Math.max(0, granTotalPrep - sc1);
+      const saldo18Unid = Math.max(0, saldo11Unid - sc2);
+
+      const fechaEmision = new Date().toLocaleDateString('es-CL', { day: '2-digit', month: 'long', year: 'numeric' });
+
+      const dibujarEncabezadoPagina = (tituloSub) => {
+        doc.setFillColor(139, 30, 45); // #8b1e2d
+        doc.rect(0, 0, pageWidth, 24, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(13);
+        doc.text('INFORME EJECUTIVO DE SANTA CENA Y ESTADÍSTICAS 2026', margin, 10);
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'normal');
+        doc.text(`${tituloSub}  |  Mes Evaluado: ${mes.toUpperCase()} 2026  |  Emisión: ${fechaEmision}`, margin, 17.5);
+      };
+
+      // =========================================================================
+      // PÁGINA 1: RESUMEN EJECUTIVO, KPI COMPARATIVOS, INSUMOS Y DESGLOSE POR SECTOR
+      // =========================================================================
+      dibujarEncabezadoPagina('Pág. 1: Balance Operativo, Comparativa Mensual y Desglose por Sector');
+      let y = 31;
+
+      // 1. Tarjetas Ejecutivas de Resumen
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10.5);
+      doc.setTextColor(15, 23, 42);
+      doc.text(`1. RESUMEN EJECUTIVO Y COMPARATIVA DEL MES (${mes.toUpperCase()} 2026)`, margin, y);
+      y += 3;
+
+      doc.autoTable({
+        startY: y,
+        margin: { left: margin, right: margin },
+        head: [['Indicador Clave', '1ª Reunión (11:00)', '2ª Reunión (18:30)', 'Total Mes Activo', `Comparativa vs ${prevNombre}`, 'Comparativa vs Prom. Anual']],
+        body: [
+          [
+            'Cenas Servidas (SC)',
+            fmtNum(sc1),
+            fmtNum(sc2),
+            fmtNum(totalSc),
+            `${difVsPrev >= 0 ? '+' : ''}${fmtNum(difVsPrev)} (${pctVsPrev >= 0 ? '+' : ''}${fmtDec(pctVsPrev, 1)}%)`,
+            `${difVsProm >= 0 ? '+' : ''}${fmtDec(difVsProm, 0)} (${pctVsProm >= 0 ? '+' : ''}${fmtDec(pctVsProm, 1)}%)`
+          ],
+          [
+            'Conteo Asistencia General',
+            fmtNum(asist1),
+            fmtNum(asist2),
+            fmtNum(totalAsist),
+            `Participación SC: ${totalAsist > 0 ? fmtDec((totalSc / totalAsist) * 100, 1) : '100'}%`,
+            `Dif. Conteo vs SC: ${difConteo >= 0 ? '+' : ''}${fmtNum(difConteo)}`
+          ],
+          [
+            'Personas que No Cenaron',
+            fmtNum(det.noCenaron11 || 0),
+            fmtNum(det.noCenaron18 || 0),
+            `${fmtNum(noCenTotal)} personas`,
+            noCenTotal === 0 ? 'Óptimo (0 sin cenar)' : 'Requiere revisión',
+            `Prom. Anual: ${fmtDec(mesesActivos.reduce((a, m) => a + (Number(m.noCenaron) || 0), 0) / numMesesAct, 1)} pers.`
+          ]
+        ],
+        theme: 'grid',
+        styles: { fontSize: 8, cellPadding: 2.2, textColor: [30, 41, 59] },
+        headStyles: { fillColor: [139, 30, 45], textColor: 255, fontStyle: 'bold' },
+        columnStyles: {
+          0: { fontStyle: 'bold', cellWidth: 38 },
+          3: { fontStyle: 'bold', textColor: [139, 30, 45] }
+        }
+      });
+
+      y = doc.lastAutoTable.finalY + 6;
+
+      // 2. Balance de Preparación de Insumos y Saldos
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10.5);
+      doc.setTextColor(15, 23, 42);
+      doc.text('2. BALANCE DE PREPARACIÓN DE CENAS, BANDEJAS Y SALDO DE VINO', margin, y);
+      y += 2.5;
+
+      doc.autoTable({
+        startY: y,
+        margin: { left: margin, right: margin },
+        head: [['Etapa / Concepto de Inventario', 'Bandejas / Frascos', 'Capacidad', 'Total Unidades', 'Estado / Flujo']],
+        body: [
+          ['Preparación Día Sábado', `${fmtNum(det.prep.sabBand)} bandejas`, `x ${det.prep.sabCant} unid.`, `${fmtNum(sabTotal)} unid.`, 'Insumo base'],
+          ['Preparación Púlpito', `${fmtNum(det.prep.pulpBand)} bandejas`, `x ${det.prep.pulpCant} unid.`, `${fmtNum(pulpTotal)} unid.`, 'Reserva Púlpito'],
+          ['Preparación Día Domingo', `${fmtNum(det.prep.domBand)} bandejas`, `x ${det.prep.domCant} unid.`, `${fmtNum(domTotal)} unid.`, 'Refuerzo Domingo'],
+          ['TOTAL GENERAL PREPARADO', `${fmtNum((Number(det.prep.sabBand) || 0) + (Number(det.prep.domBand) || 0))} (+${det.prep.pulpBand} Púlp.)`, '—', `${fmtNum(granTotalPrep)} unid.`, '100% Disponible 11:00'],
+          ['Saldo Sobrante Post 1ª Reunión (11:00)', `${fmtDec(saldo11Unid / 40, 2)} bandejas`, 'Base 40 u.', `${fmtNum(saldo11Unid)} unid.`, 'Saldo Inicial 18:30'],
+          ['Saldo Sobrante Post 2ª Reunión (18:30)', `${fmtDec(saldo18Unid / 40, 2)} bandejas`, 'Base 40 u.', `${fmtNum(saldo18Unid)} unid.`, 'Sobrante en bandejas'],
+          ['Reserva Vino Mes Anterior + Sobrante', `${fmtDec(det.vinoFrascos, 1)} frascos`, `${fmtNum(det.vinoUnidades)} u. vino`, `${fmtNum(saldo18Unid + (Number(det.vinoUnidades) || 0))} unid.`, 'Total Saldo Final']
+        ],
+        theme: 'striped',
+        styles: { fontSize: 7.8, cellPadding: 1.8 },
+        headStyles: { fillColor: [30, 41, 59], textColor: 255, fontStyle: 'bold' },
+        columnStyles: { 0: { fontStyle: 'bold' }, 3: { fontStyle: 'bold', halign: 'right' } }
+      });
+
+      y = doc.lastAutoTable.finalY + 6;
+
+      // 3. Tabla Comparativa de Distribución por Sector (11:00 vs 18:30)
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10.5);
+      doc.setTextColor(15, 23, 42);
+      doc.text(`3. DESGLOSE OPERATIVO POR SECTOR Y ÁREA (${mes.toUpperCase()} 2026)`, margin, y);
+      y += 2.5;
+
+      const bodySectores = det.r11.map((r1, i) => {
+        const r2 = det.r18[i] || { band: 0, cant: 40, udev: 0 };
+        const entr1 = (Number(r1.band) || 0) * (Number(r1.cant) || 0);
+        const serv1 = Math.max(0, entr1 - (Number(r1.udev) || 0));
+        const entr2 = (Number(r2.band) || 0) * (Number(r2.cant) || 0);
+        const serv2 = Math.max(0, entr2 - (Number(r2.udev) || 0));
+        return [
+          r1.area,
+          fmtNum(r1.band),
+          fmtNum(entr1),
+          fmtNum(r1.udev),
+          fmtNum(serv1),
+          fmtNum(r2.band),
+          fmtNum(entr2),
+          fmtNum(r2.udev),
+          fmtNum(serv2),
+          fmtNum(serv1 + serv2)
+        ];
+      });
+
+      bodySectores.push([
+        'TOTALES POR REUNIÓN',
+        fmtNum(det.r11.reduce((a, r) => a + (Number(r.band) || 0), 0)),
+        fmtNum(det.r11.reduce((a, r) => a + (Number(r.band) || 0) * (Number(r.cant) || 0), 0)),
+        fmtNum(det.r11.reduce((a, r) => a + (Number(r.udev) || 0), 0)),
+        fmtNum(sc1),
+        fmtNum(det.r18.reduce((a, r) => a + (Number(r.band) || 0), 0)),
+        fmtNum(det.r18.reduce((a, r) => a + (Number(r.band) || 0) * (Number(r.cant) || 0), 0)),
+        fmtNum(det.r18.reduce((a, r) => a + (Number(r.udev) || 0), 0)),
+        fmtNum(sc2),
+        fmtNum(totalSc)
+      ]);
+
+      doc.autoTable({
+        startY: y,
+        margin: { left: margin, right: margin },
+        head: [
+          [
+            { content: 'Sector / Área', rowSpan: 2 },
+            { content: '1ª Reunión (11:00 hrs)', colSpan: 4, styles: { halign: 'center', fillColor: [139, 30, 45] } },
+            { content: '2ª Reunión (18:30 hrs)', colSpan: 4, styles: { halign: 'center', fillColor: [51, 65, 85] } },
+            { content: 'Total Mes', rowSpan: 2, styles: { halign: 'right' } }
+          ],
+          ['Band.', 'Entreg.', 'Dev.', 'Servidas', 'Band.', 'Entreg.', 'Dev.', 'Servidas']
+        ],
+        body: bodySectores,
+        theme: 'grid',
+        styles: { fontSize: 7.5, cellPadding: 1.7, halign: 'right' },
+        headStyles: { fillColor: [30, 41, 59], textColor: 255, fontStyle: 'bold' },
+        columnStyles: {
+          0: { halign: 'left', fontStyle: 'bold', cellWidth: 42 },
+          4: { fontStyle: 'bold', textColor: [139, 30, 45] },
+          8: { fontStyle: 'bold', textColor: [30, 41, 59] },
+          9: { fontStyle: 'bold', fillColor: [255, 241, 242], textColor: [139, 30, 45] }
+        }
+      });
+
+      const obs = (document.getElementById('input_observaciones')?.value || '').trim();
+      if (obs) {
+        y = doc.lastAutoTable.finalY + 5;
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(8.5);
+        doc.setTextColor(139, 30, 45);
+        doc.text('Observaciones Registradas:', margin, y);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(51, 65, 85);
+        const splitObs = doc.splitTextToSize(obs, pageWidth - margin * 2);
+        doc.text(splitObs, margin, y + 4);
+      }
+
+      // =========================================================================
+      // PÁGINA 2: CONSOLIDADO HISTÓRICO ANUAL MES A MES Y GRÁFICOS COMPARATIVOS
+      // =========================================================================
+      doc.addPage();
+      dibujarEncabezadoPagina('Pág. 2: Consolidado Histórico Mensual 2026 y Gráficos Estadísticos');
+      y = 31;
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10.5);
+      doc.setTextColor(15, 23, 42);
+      doc.text('4. CONSOLIDADO HISTÓRICO MES A MES 2026 (COMPARATIVA ANUAL)', margin, y);
+      y += 2.5;
+
+      let s1 = 0, s2 = 0, sTot = 0, sNoCen = 0, sAs1 = 0, sAs2 = 0, sAsTot = 0, mCount = 0;
+      const bodyHist = excelState.historicoAnual.map((r, idx) => {
+        const tSc = (Number(r.sc1) || 0) + (Number(r.sc2) || 0);
+        const tAs = (Number(r.asist1) || 0) + (Number(r.asist2) || 0);
+        const prev = idx === 0
+          ? (excelState.dic2025Total || 5726)
+          : ((Number(excelState.historicoAnual[idx - 1].sc1) || 0) + (Number(excelState.historicoAnual[idx - 1].sc2) || 0));
+        const has = tSc > 0;
+        const difAnt = has && prev > 0 ? (tSc - prev) : 0;
+        const pctAnt = has && prev > 0 ? ((difAnt / prev) * 100) : 0;
+        const difAs = (has || tAs > 0) ? (tAs - tSc) : 0;
+
+        if (has) {
+          s1 += Number(r.sc1) || 0;
+          s2 += Number(r.sc2) || 0;
+          sTot += tSc;
+          sNoCen += Number(r.noCenaron) || 0;
+          sAs1 += Number(r.asist1) || 0;
+          sAs2 += Number(r.asist2) || 0;
+          sAsTot += tAs;
+          mCount++;
+        }
+
+        return [
+          r.mes === mes ? `${r.mes} (Activo)` : r.mes,
+          has ? fmtNum(r.sc1) : '—',
+          has ? fmtNum(r.sc2) : '—',
+          has ? fmtNum(tSc) : '—',
+          has ? `${pctAnt >= 0 ? '+' : ''}${fmtDec(pctAnt, 1)}%` : '—',
+          has ? `${difAnt >= 0 ? '+' : ''}${fmtNum(difAnt)}` : '—',
+          has ? fmtNum(r.noCenaron) : '—',
+          tAs > 0 ? fmtNum(r.asist1) : '—',
+          tAs > 0 ? fmtNum(r.asist2) : '—',
+          tAs > 0 ? fmtNum(tAs) : '—',
+          (has || tAs > 0) ? `${difAs >= 0 ? '+' : ''}${fmtNum(difAs)}` : '—'
+        ];
+      });
+
+      const divM = mCount || 1;
+      bodyHist.push([
+        `TOTAL ANUAL (${mCount} m.)`,
+        fmtNum(s1), fmtNum(s2), fmtNum(sTot), '—', '—', fmtNum(sNoCen),
+        fmtNum(sAs1), fmtNum(sAs2), fmtNum(sAsTot), fmtNum(sAsTot - sTot)
+      ]);
+      bodyHist.push([
+        'PROMEDIO MENSUAL',
+        fmtDec(s1 / divM, 1), fmtDec(s2 / divM, 1), fmtDec(sTot / divM, 1), '—', '—', fmtDec(sNoCen / divM, 1),
+        fmtDec(sAs1 / divM, 1), fmtDec(sAs2 / divM, 1), fmtDec(sAsTot / divM, 1), fmtDec((sAsTot - sTot) / divM, 1)
+      ]);
+
+      doc.autoTable({
+        startY: y,
+        margin: { left: margin, right: margin },
+        head: [['Mes 2026', 'SC 1°', 'SC 2°', 'Total SC', 'Var. %', 'Dif. Mes', 'No Cen.', 'Asist. 1°', 'Asist. 2°', 'Tot. Asist.', 'Dif. Conteo']],
+        body: bodyHist,
+        theme: 'grid',
+        styles: { fontSize: 7.4, cellPadding: 1.6, halign: 'right' },
+        headStyles: { fillColor: [139, 30, 45], textColor: 255, fontStyle: 'bold' },
+        columnStyles: {
+          0: { halign: 'left', fontStyle: 'bold', cellWidth: 28 },
+          3: { fontStyle: 'bold', textColor: [139, 30, 45] },
+          6: { fontStyle: 'bold', textColor: [185, 28, 28] },
+          9: { fontStyle: 'bold' }
+        }
+      });
+
+      y = doc.lastAutoTable.finalY + 7;
+
+      // 5. Incrustar los 4 Gráficos Estadísticos en Alta Resolución
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10.5);
+      doc.setTextColor(15, 23, 42);
+      doc.text('5. PANEL GRÁFICO DE EVOLUCIÓN Y COMPARATIVA MENSUAL', margin, y);
+      y += 4;
+
+      const addChartToDoc = (canvasId, title, xPos, yPos, w, h) => {
+        const canvas = document.getElementById(canvasId);
+        if (!canvas) return;
+        try {
+          doc.setDrawColor(226, 232, 240);
+          doc.setFillColor(255, 255, 255);
+          doc.roundedRect(xPos, yPos, w, h, 2, 2, 'FD');
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(8);
+          doc.setTextColor(30, 41, 59);
+          doc.text(title, xPos + 3, yPos + 5);
+          const imgData = canvas.toDataURL('image/png', 1.0);
+          doc.addImage(imgData, 'PNG', xPos + 2, yPos + 7, w - 4, h - 9);
+        } catch (err) {
+          console.warn('No se pudo adjuntar gráfico', canvasId, err);
+        }
+      };
+
+      const boxW = (pageWidth - margin * 2 - 6) / 2;
+      const boxH = 54;
+
+      addChartToDoc('chartExcelAnual', 'Evolución Mensual Cenas Servidas (1ª vs 2ª)', margin, y, boxW, boxH);
+      addChartToDoc('chartExcelComparativa', 'Comparativa Cenas Servidas vs Asistencia', margin + boxW + 6, y, boxW, boxH);
+      addChartToDoc('chartExcelSectores', `Distribución por Sector (${mes} 2026)`, margin, y + boxH + 5, boxW, boxH);
+      addChartToDoc('chartExcelNoCenaron', 'Indicador Mensual "No Cenaron"', margin + boxW + 6, y + boxH + 5, boxW, boxH);
+
+      // Pie de página en todas las páginas
+      const totalPages = doc.internal.getNumberOfPages();
+      for (let p = 1; p <= totalPages; p++) {
+        doc.setPage(p);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7.5);
+        doc.setTextColor(148, 163, 184);
+        doc.text(
+          `Sistema de Gestión Santa Cena · Informe Oficial Comparativo (${mes} 2026) · Página ${p} de ${totalPages}`,
+          pageWidth / 2,
+          pageHeight - 6,
+          { align: 'center' }
+        );
+      }
+
+      doc.save(`Informe_Ejecutivo_Santa_Cena_${mes}_2026.pdf`);
     }
 
     function cerrarSesion() {
