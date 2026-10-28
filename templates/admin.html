@@ -127,12 +127,20 @@
         <!-- Filtros Rápidos -->
         <div class="flex flex-wrap items-center gap-2">
           
-          <!-- Filtro Fecha (Histórico vs Hoy - Solo Administradores) -->
-          <div id="wrapperFiltroFecha" class="hidden">
-            <select id="filtroFecha" onchange="filtrarRegistros()" class="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs sm:text-sm font-bold text-slate-700 outline-none focus:border-[#8b1e2d]">
-              <option value="todos">📜 Todo el Histórico Mensual</option>
-              <option value="hoy">📅 Solo Hoy / Evento Actual</option>
-            </select>
+          <!-- Selector Diario vs Histórico (Solo Administradores: Juan y Andrés Acevedo) -->
+          <div id="wrapperFiltroFecha" class="hidden inline-flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
+            <button type="button" id="btnModoDiario" onclick="cambiarModoRegistros('hoy')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold bg-[#8b1e2d] text-white shadow-sm transition">
+              📅 Diario (Hoy)
+            </button>
+            <button type="button" id="btnModoHistorico" onclick="cambiarModoRegistros('todos')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold text-slate-600 hover:text-slate-900 transition">
+              📜 Histórico
+            </button>
+            <input type="hidden" id="filtroFecha" value="hoy" />
+          </div>
+
+          <!-- Insignia Fija para Captadoras (Solo Diario) -->
+          <div id="badgeSoloDiarioCaptadora" class="hidden inline-flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-extrabold bg-rose-50 text-[#8b1e2d] border border-rose-200">
+            📅 Vista Diaria (Hoy)
           </div>
 
           <!-- Filtro Culto -->
@@ -207,18 +215,92 @@
     <!-- ======================================================== -->
     <section id="tab-dashboard" class="hidden space-y-4 sm:space-y-6">
 
-      <!-- Botón Descargar Informe PDF Estructurado -->
-      <div class="no-print flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-        <span class="text-xs text-slate-500 font-semibold">Resumen analítico y distribución física en vivo</span>
-        <div class="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-          <button onclick="descargarInformePDFEstructurado()" class="flex-1 sm:flex-initial px-4 py-2 bg-[#8b1e2d] text-white rounded-xl text-xs sm:text-sm font-extrabold hover:bg-[#701824] transition inline-flex items-center justify-center gap-2 shadow-sm">
-            <span>📄</span>
-            <span>Descargar Informe Ejecutivo PDF</span>
-          </button>
-          <button onclick="window.print()" class="px-3 py-2 bg-slate-900 text-white rounded-xl text-xs sm:text-sm font-bold hover:bg-black transition inline-flex items-center justify-center gap-1.5 shadow-sm">
-            <span>🖨️</span>
-            <span class="hidden sm:inline">Imprimir Vista</span>
-          </button>
+      <!-- Barra de Control del Dashboard: Periodo (Diario, Último Mes, Histórico) + Opciones de Visualización -->
+      <div class="no-print bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+        <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3">
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-black uppercase tracking-wider text-[#8b1e2d]">Panel de Control del Dashboard</span>
+              <span id="dashPeriodoBadge" class="px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-rose-50 text-[#8b1e2d] border border-rose-200">Último Mes</span>
+            </div>
+            <p class="text-xs text-slate-500 font-semibold mt-0.5">Elige el periodo de análisis (Diario, Último Mes o Histórico) y personaliza qué secciones mostrar.</p>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-2 w-full lg:w-auto">
+            <button onclick="descargarInformePDFEstructurado()" class="flex-1 sm:flex-initial px-4 py-2 bg-[#8b1e2d] text-white rounded-xl text-xs sm:text-sm font-extrabold hover:bg-[#701824] transition inline-flex items-center justify-center gap-2 shadow-sm">
+              <span>📄</span>
+              <span>Descargar Informe Ejecutivo PDF</span>
+            </button>
+            <button onclick="window.print()" class="px-3 py-2 bg-slate-900 text-white rounded-xl text-xs sm:text-sm font-bold hover:bg-black transition inline-flex items-center justify-center gap-1.5 shadow-sm">
+              <span>🖨️</span>
+              <span class="hidden sm:inline">Imprimir Vista</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Fila 1: Selector de Periodo (Diario / Último Mes / Histórico) + Selector de Mes Específico + Filtro Culto -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2 border-t border-slate-100">
+          <!-- Periodo -->
+          <div>
+            <label class="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">1. Periodo de Datos a Mostrar</label>
+            <div class="grid grid-cols-3 gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+              <button type="button" id="btnDashPeriodo-diario" onclick="cambiarPeriodoDashboard('diario')" class="px-2 py-2 rounded-lg text-xs font-extrabold text-slate-600 hover:text-slate-900 transition text-center">
+                📅 Diario <span id="badgeCountDiario" class="block text-[10px] opacity-80 font-bold">(0)</span>
+              </button>
+              <button type="button" id="btnDashPeriodo-ultimo_mes" onclick="cambiarPeriodoDashboard('ultimo_mes')" class="px-2 py-2 rounded-lg text-xs font-extrabold bg-[#8b1e2d] text-white shadow-sm transition text-center">
+                📆 Último Mes <span id="badgeCountUltimoMes" class="block text-[10px] opacity-90 font-bold">(0)</span>
+              </button>
+              <button type="button" id="btnDashPeriodo-historico" onclick="cambiarPeriodoDashboard('historico')" class="px-2 py-2 rounded-lg text-xs font-extrabold text-slate-600 hover:text-slate-900 transition text-center">
+                📜 Histórico <span id="badgeCountHistorico" class="block text-[10px] opacity-80 font-bold">(0)</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Selector de Mes Específico (opcional dentro de Último Mes / Histórico) -->
+          <div>
+            <label class="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">2. Filtrar Mes Específico (Opcional)</label>
+            <select id="dashMesSelect" onchange="cambiarMesEspecificoDashboard(this.value)" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs sm:text-sm font-extrabold text-slate-800 outline-none focus:border-[#8b1e2d]">
+              <option value="">Automático según periodo seleccionado</option>
+            </select>
+          </div>
+
+          <!-- Selector de Culto Global del Dashboard -->
+          <div>
+            <label class="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">3. Culto a Visualizar en Gráficos y Tabla</label>
+            <div class="grid grid-cols-3 gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+              <button type="button" id="btnDashCulto-ambos" onclick="cambiarCultoDashboard('ambos')" class="px-2 py-2 rounded-lg text-xs font-extrabold bg-[#8b1e2d] text-white shadow-sm transition">
+                Ambos Cultos
+              </button>
+              <button type="button" id="btnDashCulto-11:00" onclick="cambiarCultoDashboard('11:00')" class="px-2 py-2 rounded-lg text-xs font-extrabold text-slate-600 hover:text-slate-900 transition">
+                ☀️ 11:00 hrs
+              </button>
+              <button type="button" id="btnDashCulto-18:30" onclick="cambiarCultoDashboard('18:30')" class="px-2 py-2 rounded-lg text-xs font-extrabold text-slate-600 hover:text-slate-900 transition">
+                🌙 18:30 hrs
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Fila 2: Opciones de Qué Mostrar en el Dashboard -->
+        <div class="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
+          <span class="text-[11px] font-black uppercase tracking-wider text-slate-500">Opciones de qué mostrar:</span>
+          <div class="flex flex-wrap items-center gap-1.5">
+            <button type="button" id="toggleSec-kpis" onclick="toggleSeccionDashboard('kpis')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold bg-rose-50 text-[#8b1e2d] border border-rose-200 transition">
+              ✓ Tarjetas KPI
+            </button>
+            <button type="button" id="toggleSec-sectores" onclick="toggleSeccionDashboard('sectores')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold bg-rose-50 text-[#8b1e2d] border border-rose-200 transition">
+              ✓ Gráfico Sectores
+            </button>
+            <button type="button" id="toggleSec-captadoras" onclick="toggleSeccionDashboard('captadoras')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold bg-rose-50 text-[#8b1e2d] border border-rose-200 transition">
+              ✓ Gráfico Captadoras
+            </button>
+            <button type="button" id="toggleSec-plano" onclick="toggleSeccionDashboard('plano')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold bg-rose-50 text-[#8b1e2d] border border-rose-200 transition">
+              ✓ Plano Esquemático
+            </button>
+            <button type="button" id="toggleSec-tabla" onclick="toggleSeccionDashboard('tabla')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold bg-rose-50 text-[#8b1e2d] border border-rose-200 transition">
+              ✓ Tabla Detalle
+            </button>
+          </div>
         </div>
       </div>
 
@@ -230,7 +312,7 @@
       </div>
 
       <!-- 4 TARJETAS KPI -->
-      <div class="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
+      <div id="dashSection-kpis" class="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
         
         <!-- KPI 1 -->
         <div class="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
@@ -269,7 +351,7 @@
       </div>
 
       <!-- GRÁFICO 1: CAPTACIÓN POR SECTOR Y CULTO -->
-      <div class="bg-white p-3.5 sm:p-5 rounded-2xl border border-slate-200 shadow-sm">
+      <div id="dashSection-sectores" class="bg-white p-3.5 sm:p-5 rounded-2xl border border-slate-200 shadow-sm">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-3 sm:pb-4 border-b border-slate-100 gap-2">
           <div>
             <h3 class="text-xs sm:text-sm font-extrabold text-slate-900 tracking-wider uppercase">Captación por Sector y Culto</h3>
@@ -292,7 +374,7 @@
       </div>
 
       <!-- GRÁFICO 2: TOTAL POR CAPTADORA -->
-      <div class="bg-white p-3.5 sm:p-5 rounded-2xl border border-slate-200 shadow-sm">
+      <div id="dashSection-captadoras" class="bg-white p-3.5 sm:p-5 rounded-2xl border border-slate-200 shadow-sm">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-3 sm:pb-4 border-b border-slate-100 gap-2">
           <div>
             <h3 class="text-xs sm:text-sm font-extrabold text-slate-900 tracking-wider uppercase">Total por Captadora</h3>
@@ -315,7 +397,7 @@
       </div>
 
       <!-- SECCIÓN 3: PLANO ESQUEMÁTICO DE SECTORES (Distribución idéntica al mapa) -->
-      <div class="bg-white p-3.5 sm:p-5 rounded-2xl border border-slate-200 shadow-sm">
+      <div id="dashSection-plano" class="bg-white p-3.5 sm:p-5 rounded-2xl border border-slate-200 shadow-sm">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-3 sm:pb-4 border-b border-slate-100 gap-3">
           <div>
             <h3 class="text-xs sm:text-sm font-extrabold text-slate-900 tracking-wider uppercase">Plano Esquemático de Sectores</h3>
@@ -437,60 +519,71 @@
             <span class="absolute bg-slate-50 px-3 text-[10px] font-black uppercase tracking-widest text-slate-400">Pasillo Principal</span>
           </div>
 
-          <!-- LÍNEA FONDO (7 SECTORES: 14, 13, 10, 8, 6, 4, 3) -->
-          <div>
-            <div class="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-2 text-center">Fondo · Mesón de Entrada</div>
-            <div class="grid grid-cols-7 gap-1.5 sm:gap-2 text-center">
-              
-              <!-- Sector 14 -->
-              <div id="plano-box-14" class="p-2 rounded-xl bg-white border border-slate-200 shadow-sm flex flex-col justify-between h-22">
-                <span class="text-[10px] font-black text-slate-600">S14</span>
-                <span id="plano-count-14" class="text-base sm:text-lg font-black text-slate-900 my-0.5">0</span>
-                <span class="text-[8px] text-slate-400 font-bold truncate">199-215</span>
+          <!-- LÍNEA FONDO (7 SECTORES SEPARADOS EN MESÓN ENTRADA SUR Y MESÓN ENTRADA NORTE) -->
+          <div class="grid grid-cols-7 gap-2 sm:gap-3">
+            <!-- Mesón Entrada Sur: Sectores 14, 13, 10, 8 -->
+            <div class="col-span-4 bg-orange-50/60 border border-orange-200 rounded-xl p-2">
+              <div class="text-[10px] font-black uppercase tracking-wider text-orange-800 mb-2 text-center">
+                Mesón Entrada Sur · Sectores 14, 13, 10 y 8
               </div>
+              <div class="grid grid-cols-4 gap-1.5 sm:gap-2 text-center">
+                <!-- Sector 14 -->
+                <div id="plano-box-14" class="p-2 rounded-xl bg-white border border-orange-200 shadow-sm flex flex-col justify-between h-22">
+                  <span class="text-[10px] font-black text-orange-800">S14</span>
+                  <span id="plano-count-14" class="text-base sm:text-lg font-black text-slate-900 my-0.5">0</span>
+                  <span class="text-[8px] text-slate-400 font-bold truncate">199-215</span>
+                </div>
 
-              <!-- Sector 13 -->
-              <div id="plano-box-13" class="p-2 rounded-xl bg-white border border-slate-200 shadow-sm flex flex-col justify-between h-22">
-                <span class="text-[10px] font-black text-slate-600">S13</span>
-                <span id="plano-count-13" class="text-base sm:text-lg font-black text-slate-900 my-0.5">0</span>
-                <span class="text-[8px] text-slate-400 font-bold truncate">188-198</span>
+                <!-- Sector 13 -->
+                <div id="plano-box-13" class="p-2 rounded-xl bg-white border border-orange-200 shadow-sm flex flex-col justify-between h-22">
+                  <span class="text-[10px] font-black text-orange-800">S13</span>
+                  <span id="plano-count-13" class="text-base sm:text-lg font-black text-slate-900 my-0.5">0</span>
+                  <span class="text-[8px] text-slate-400 font-bold truncate">188-198</span>
+                </div>
+
+                <!-- Sector 10 -->
+                <div id="plano-box-10" class="p-2 rounded-xl bg-white border border-orange-200 shadow-sm flex flex-col justify-between h-22">
+                  <span class="text-[10px] font-black text-orange-800">S10</span>
+                  <span id="plano-count-10" class="text-base sm:text-lg font-black text-slate-900 my-0.5">0</span>
+                  <span class="text-[8px] text-slate-400 font-bold truncate">139-155</span>
+                </div>
+
+                <!-- Sector 8 -->
+                <div id="plano-box-8" class="p-2 rounded-xl bg-white border border-orange-200 shadow-sm flex flex-col justify-between h-22">
+                  <span class="text-[10px] font-black text-orange-800">S8</span>
+                  <span id="plano-count-8" class="text-base sm:text-lg font-black text-slate-900 my-0.5">0</span>
+                  <span class="text-[8px] text-slate-400 font-bold truncate">105-121</span>
+                </div>
               </div>
+            </div>
 
-              <!-- Sector 10 -->
-              <div id="plano-box-10" class="p-2 rounded-xl bg-white border border-slate-200 shadow-sm flex flex-col justify-between h-22">
-                <span class="text-[10px] font-black text-slate-600">S10</span>
-                <span id="plano-count-10" class="text-base sm:text-lg font-black text-slate-900 my-0.5">0</span>
-                <span class="text-[8px] text-slate-400 font-bold truncate">139-155</span>
+            <!-- Mesón Entrada Norte: Sectores 6, 4, 3 -->
+            <div class="col-span-3 bg-amber-50/60 border border-amber-200 rounded-xl p-2">
+              <div class="text-[10px] font-black uppercase tracking-wider text-amber-800 mb-2 text-center">
+                Mesón Entrada Norte · Sectores 6, 4 y 3
               </div>
+              <div class="grid grid-cols-3 gap-1.5 sm:gap-2 text-center">
+                <!-- Sector 6 -->
+                <div id="plano-box-6" class="p-2 rounded-xl bg-white border border-amber-200 shadow-sm flex flex-col justify-between h-22">
+                  <span class="text-[10px] font-black text-amber-800">S6</span>
+                  <span id="plano-count-6" class="text-base sm:text-lg font-black text-slate-900 my-0.5">0</span>
+                  <span class="text-[8px] text-slate-400 font-bold truncate">74-90</span>
+                </div>
 
-              <!-- Sector 8 -->
-              <div id="plano-box-8" class="p-2 rounded-xl bg-white border border-slate-200 shadow-sm flex flex-col justify-between h-22">
-                <span class="text-[10px] font-black text-slate-600">S8</span>
-                <span id="plano-count-8" class="text-base sm:text-lg font-black text-slate-900 my-0.5">0</span>
-                <span class="text-[8px] text-slate-400 font-bold truncate">105-121</span>
+                <!-- Sector 4 -->
+                <div id="plano-box-4" class="p-2 rounded-xl bg-white border border-amber-200 shadow-sm flex flex-col justify-between h-22">
+                  <span class="text-[10px] font-black text-amber-800">S4</span>
+                  <span id="plano-count-4" class="text-base sm:text-lg font-black text-slate-900 my-0.5">0</span>
+                  <span class="text-[8px] text-slate-400 font-bold truncate">46-56</span>
+                </div>
+
+                <!-- Sector 3 -->
+                <div id="plano-box-3" class="p-2 rounded-xl bg-white border border-amber-200 shadow-sm flex flex-col justify-between h-22">
+                  <span class="text-[10px] font-black text-amber-800">S3</span>
+                  <span id="plano-count-3" class="text-base sm:text-lg font-black text-slate-900 my-0.5">0</span>
+                  <span class="text-[8px] text-slate-400 font-bold truncate">29-45</span>
+                </div>
               </div>
-
-              <!-- Sector 6 -->
-              <div id="plano-box-6" class="p-2 rounded-xl bg-white border border-slate-200 shadow-sm flex flex-col justify-between h-22">
-                <span class="text-[10px] font-black text-slate-600">S6</span>
-                <span id="plano-count-6" class="text-base sm:text-lg font-black text-slate-900 my-0.5">0</span>
-                <span class="text-[8px] text-slate-400 font-bold truncate">74-90</span>
-              </div>
-
-              <!-- Sector 4 -->
-              <div id="plano-box-4" class="p-2 rounded-xl bg-white border border-slate-200 shadow-sm flex flex-col justify-between h-22">
-                <span class="text-[10px] font-black text-slate-600">S4</span>
-                <span id="plano-count-4" class="text-base sm:text-lg font-black text-slate-900 my-0.5">0</span>
-                <span class="text-[8px] text-slate-400 font-bold truncate">46-56</span>
-              </div>
-
-              <!-- Sector 3 -->
-              <div id="plano-box-3" class="p-2 rounded-xl bg-white border border-slate-200 shadow-sm flex flex-col justify-between h-22">
-                <span class="text-[10px] font-black text-slate-600">S3</span>
-                <span id="plano-count-3" class="text-base sm:text-lg font-black text-slate-900 my-0.5">0</span>
-                <span class="text-[8px] text-slate-400 font-bold truncate">29-45</span>
-              </div>
-
             </div>
           </div>
 
@@ -504,16 +597,16 @@
     </div>
 
       <!-- SECCIÓN 4: TABLA DETALLE POR SECTOR -->
-      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+      <div id="dashSection-tabla" class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         <div class="p-4 border-b border-slate-100 flex items-center justify-between">
-          <h3 class="text-xs sm:text-sm font-extrabold text-slate-900 tracking-wider uppercase">Detalle por Sector y Captadora</h3>
+          <h3 class="text-xs sm:text-sm font-extrabold text-slate-900 tracking-wider uppercase">Detalle por Sector, Mesón y Captadora</h3>
           <span class="text-[11px] sm:text-xs text-slate-400 font-semibold">Sectores 1 al 14</span>
         </div>
         <div class="overflow-x-auto">
-          <table class="w-full text-left text-xs sm:text-sm text-slate-700 min-w-[640px]">
+          <table class="w-full text-left text-xs sm:text-sm text-slate-700 min-w-[680px]">
             <thead class="bg-slate-50 border-b border-slate-200 font-extrabold text-slate-500 uppercase tracking-wider text-[11px] sm:text-xs">
               <tr class="whitespace-nowrap">
-                <th class="py-2.5 px-3">Sector</th>
+                <th class="py-2.5 px-3">Sector / Mesón</th>
                 <th class="py-2.5 px-3">Filas</th>
                 <th class="py-2.5 px-3">11:00 Captadora</th>
                 <th class="py-2.5 px-3 text-center">11:00</th>
@@ -1133,26 +1226,44 @@
     let registrosGlobales = [];
     let statsGlobales = null;
     let isAdminGlobal = false;
+    let fechaHoyServidor = '';
     let planoCultoFiltro = '11:00';
+    let dashPeriodoActivo = 'ultimo_mes';
+    let dashMesEspecifico = '';
+    let dashCultoFiltro = 'ambos';
+    let dashSeccionesVisibles = {
+      kpis: true,
+      sectores: true,
+      captadoras: true,
+      plano: true,
+      tabla: true
+    };
     let chartZonasInstance = null;
     let chartCaptadorasInstance = null;
 
     const RANGOS_SECTORES = [
       { id: 1, s: 1, e: 13, meson: 'Mesón Norte' },
       { id: 2, s: 14, e: 28, meson: 'Mesón Norte' },
-      { id: 3, s: 29, e: 45, meson: 'Mesón Entrada' },
-      { id: 4, s: 46, e: 56, meson: 'Mesón Entrada' },
+      { id: 3, s: 29, e: 45, meson: 'Mesón Entrada Norte' },
+      { id: 4, s: 46, e: 56, meson: 'Mesón Entrada Norte' },
       { id: 5, s: 57, e: 73, meson: 'Mesón Norte' },
-      { id: 6, s: 74, e: 90, meson: 'Mesón Entrada' },
+      { id: 6, s: 74, e: 90, meson: 'Mesón Entrada Norte' },
       { id: 7, s: 91, e: 104, meson: 'Mesón Sur' },
-      { id: 8, s: 105, e: 121, meson: 'Mesón Entrada' },
+      { id: 8, s: 105, e: 121, meson: 'Mesón Entrada Sur' },
       { id: 9, s: 122, e: 138, meson: 'Mesón Sur' },
-      { id: 10, s: 139, e: 155, meson: 'Mesón Entrada' },
+      { id: 10, s: 139, e: 155, meson: 'Mesón Entrada Sur' },
       { id: 11, s: 156, e: 168, meson: 'Mesón Sur' },
       { id: 12, s: 169, e: 187, meson: 'Mesón Sur' },
-      { id: 13, s: 188, e: 198, meson: 'Mesón Entrada' },
-      { id: 14, s: 199, e: 215, meson: 'Mesón Entrada' }
+      { id: 13, s: 188, e: 198, meson: 'Mesón Entrada Sur' },
+      { id: 14, s: 199, e: 215, meson: 'Mesón Entrada Sur' }
     ];
+
+    function obtenerHoyChileFallback() {
+      if (fechaHoyServidor) return fechaHoyServidor;
+      const now = new Date();
+      const chileMs = now.getTime() - (3 * 60 * 60 * 1000);
+      return new Date(chileMs).toISOString().slice(0, 10);
+    }
 
     function getAuthHeaders() {
       const token = localStorage.getItem('accessToken');
@@ -1189,8 +1300,36 @@
     }
 
     // ==========================================
-    // 1. CARGA Y GESTIÓN DE REGISTROS
+    // 1. CARGA Y GESTIÓN DE REGISTROS (DIARIO POR DEFECTO, HISTÓRICO SOLO ADMIN)
     // ==========================================
+    function cambiarModoRegistros(modo) {
+      const filtroInput = document.getElementById('filtroFecha');
+      if (!isAdminGlobal) {
+        if (filtroInput) filtroInput.value = 'hoy';
+        filtrarRegistros();
+        return;
+      }
+      const nuevoModo = (modo === 'todos') ? 'todos' : 'hoy';
+      if (filtroInput) filtroInput.value = nuevoModo;
+
+      const btnDiario = document.getElementById('btnModoDiario');
+      const btnHist = document.getElementById('btnModoHistorico');
+      const labelTab = document.getElementById('labelTabRegistros');
+
+      if (btnDiario && btnHist) {
+        if (nuevoModo === 'hoy') {
+          btnDiario.className = 'px-3 py-1.5 rounded-lg text-xs font-extrabold bg-[#8b1e2d] text-white shadow-sm transition';
+          btnHist.className = 'px-3 py-1.5 rounded-lg text-xs font-extrabold text-slate-600 hover:text-slate-900 transition';
+          if (labelTab) labelTab.textContent = 'Registros (Diario Hoy)';
+        } else {
+          btnHist.className = 'px-3 py-1.5 rounded-lg text-xs font-extrabold bg-[#8b1e2d] text-white shadow-sm transition';
+          btnDiario.className = 'px-3 py-1.5 rounded-lg text-xs font-extrabold text-slate-600 hover:text-slate-900 transition';
+          if (labelTab) labelTab.textContent = 'Registros (Histórico Completo)';
+        }
+      }
+      filtrarRegistros();
+    }
+
     async function cargarRegistros() {
       try {
         const res = await fetch('/registros/listar', { headers: getAuthHeaders() });
@@ -1201,6 +1340,9 @@
         const data = await res.json();
         registrosGlobales = Array.isArray(data?.rows) ? data.rows : [];
         isAdminGlobal = !!data?.is_admin;
+        if (data?.fecha_hoy) {
+          fechaHoyServidor = data.fecha_hoy;
+        }
 
         // Mostrar u ocultar pestañas de dashboard y conteo según rol
         const tabDash = document.getElementById('tabBtn-dashboard');
@@ -1217,26 +1359,30 @@
         const headerSub = document.getElementById('headerSubtitulo');
         const labelTab = document.getElementById('labelTabRegistros');
         const wrapperFecha = document.getElementById('wrapperFiltroFecha');
-        const filtroFechaSelect = document.getElementById('filtroFecha');
+        const badgeCaptadora = document.getElementById('badgeSoloDiarioCaptadora');
+        const filtroFechaInput = document.getElementById('filtroFecha');
 
         if (isAdminGlobal) {
           if (headerTitulo) headerTitulo.textContent = 'Santa Cena 2026 · Administración';
-          if (headerSub) headerSub.textContent = `Administrador: ${userName} · Histórico Completo y Control`;
-          if (labelTab) labelTab.textContent = 'Todos los Registros (Histórico)';
+          if (headerSub) headerSub.textContent = `Administrador: ${userName} · Diario Hoy y Opción Histórico`;
           if (wrapperFecha) wrapperFecha.classList.remove('hidden');
+          if (badgeCaptadora) badgeCaptadora.classList.add('hidden');
+          // Al entrar a /admin, mostrar por defecto lo registrado en el mismo día (Diario)
+          const modoActual = filtroFechaInput?.value || 'hoy';
+          cambiarModoRegistros(modoActual);
         } else {
           if (headerTitulo) headerTitulo.textContent = 'Santa Cena 2026 · Mis Registros';
-          if (headerSub) headerSub.textContent = `Hermana: ${userName} · Registros de Hoy`;
-          if (labelTab) labelTab.textContent = 'Mis Registros de Hoy';
+          if (headerSub) headerSub.textContent = `Hermana: ${userName} · Registros del Día`;
+          if (labelTab) labelTab.textContent = 'Mis Registros (Diario)';
           if (wrapperFecha) wrapperFecha.classList.add('hidden');
-          if (filtroFechaSelect) filtroFechaSelect.value = 'hoy';
+          if (badgeCaptadora) badgeCaptadora.classList.remove('hidden');
+          if (filtroFechaInput) filtroFechaInput.value = 'hoy';
+          filtrarRegistros();
         }
 
         // Mostrar elementos exclusivos de admin
         document.getElementById('btnResetTotal').classList.toggle('hidden', !isAdminGlobal);
         document.getElementById('thRegistrador').classList.toggle('hidden', !isAdminGlobal);
-
-        filtrarRegistros();
       } catch (e) {
         console.error(e);
         document.getElementById('tablaRegistros').innerHTML = `
@@ -1249,15 +1395,15 @@
       const q = (document.getElementById('filtroBusqueda').value || '').toLowerCase().trim();
       const culto = document.getElementById('filtroCulto').value;
       const sector = document.getElementById('filtroSector').value;
-      const filtroFecha = (!isAdminGlobal) ? 'hoy' : (document.getElementById('filtroFecha')?.value || 'todos');
+      const filtroFecha = (!isAdminGlobal) ? 'hoy' : (document.getElementById('filtroFecha')?.value || 'hoy');
       
-      const hoyStr = new Date().toISOString().slice(0, 10);
+      const hoyStr = obtenerHoyChileFallback();
 
       const filtrados = registrosGlobales.filter(r => {
-        // Filtro Fecha (Histórico vs Hoy)
+        // Filtro Fecha: Por defecto solo lo registrado en el mismo día ('hoy'), salvo que Admin elija Histórico ('todos')
         if (filtroFecha === 'hoy') {
           const rFecha = (r.fecha || (r.created_at || '')).slice(0, 10);
-          if (rFecha && rFecha !== hoyStr) return false;
+          if (rFecha !== hoyStr) return false;
         }
 
         // Filtro Culto
@@ -1272,7 +1418,8 @@
           const matchFila = String(r.fila || '').toLowerCase().includes(q);
           const matchTel = String(r.telefono || '').toLowerCase().includes(q);
           const matchCap = String(r.registrador_nombre || r.registrador_email || '').toLowerCase().includes(q);
-          if (!matchNombre && !matchFila && !matchTel && !matchCap) return false;
+          const matchMeson = String(r.mesa_label || '').toLowerCase().includes(q);
+          if (!matchNombre && !matchFila && !matchTel && !matchCap && !matchMeson) return false;
         }
         return true;
       });
@@ -1287,7 +1434,7 @@
         return filaA - filaB;
       });
 
-      renderTablaRegistros(filtrados);
+      renderTablaRegistros(filtrados, filtroFecha, hoyStr);
     }
 
     function normalizarTelefonoChileno(val) {
@@ -1304,18 +1451,25 @@
       return digits;
     }
 
-    function renderTablaRegistros(rows) {
+    function renderTablaRegistros(rows, filtroFecha = 'hoy', hoyStr = '') {
       const tbody = document.getElementById('tablaRegistros');
       const countEl = document.getElementById('contadorRegistros');
       if (isAdminGlobal) {
-        countEl.textContent = `Mostrando ${rows.length} de ${registrosGlobales.length} hermanos (Ordenados: Sector 1 al 14)`;
+        if (filtroFecha === 'hoy') {
+          countEl.innerHTML = `📅 <strong>Vista Diaria (${hoyStr})</strong>: Mostrando <strong>${rows.length}</strong> registros de hoy (Total histórico guardado: ${registrosGlobales.length}). Usa el botón <strong>"📜 Histórico"</strong> arriba para ver meses anteriores.`;
+        } else {
+          countEl.innerHTML = `📜 <strong>Histórico Completo</strong>: Mostrando <strong>${rows.length}</strong> de ${registrosGlobales.length} hermanos (Ordenados: Sector 1 al 14).`;
+        }
       } else {
-        countEl.textContent = `Mostrando tus ${rows.length} registros ingresados hoy`;
+        countEl.textContent = `📅 Vista Diaria (${hoyStr}): Mostrando tus ${rows.length} registros ingresados hoy`;
       }
 
       if (!rows.length) {
+        const msgVacio = (isAdminGlobal && filtroFecha === 'hoy' && registrosGlobales.length > 0)
+          ? `No hay registros ingresados hoy (${hoyStr}). Tienes ${registrosGlobales.length} registros guardados en el Histórico — haz clic en "📜 Histórico" arriba si deseas consultarlos.`
+          : `No se encontraron registros en esta vista.`;
         tbody.innerHTML = `
-          <tr><td colspan="7" class="py-8 text-center text-slate-400 font-semibold italic">No se encontraron registros.</td></tr>
+          <tr><td colspan="7" class="py-8 text-center text-slate-400 font-semibold italic">${msgVacio}</td></tr>
         `;
         return;
       }
@@ -1350,7 +1504,7 @@
             </td>
             <td class="py-3 px-4">
               <div class="font-bold text-slate-800">Sector ${r.sector || '—'}</div>
-              <div class="text-[11px] text-slate-400 font-medium">${r.mesa_label || 'Mesón'}</div>
+              <div class="text-[11px] text-slate-500 font-semibold">${r.mesa_label || 'Mesón'}</div>
             </td>
             <td class="py-3 px-4 text-center">${cultoBadge}</td>
             ${isAdminGlobal ? `
@@ -1501,15 +1655,131 @@
     }
 
     // ==========================================
-    // 3. DASHBOARD E INFORMES
+    // 3. DASHBOARD E INFORMES (DIARIO, ÚLTIMO MES, HISTÓRICO + OPCIONES DE VISTA)
     // ==========================================
+    function cambiarPeriodoDashboard(periodo) {
+      dashPeriodoActivo = periodo;
+      if (periodo === 'diario' || periodo === 'historico') {
+        dashMesEspecifico = '';
+        const sel = document.getElementById('dashMesSelect');
+        if (sel) sel.value = '';
+      }
+      ['diario', 'ultimo_mes', 'historico'].forEach(p => {
+        const btn = document.getElementById(`btnDashPeriodo-${p}`);
+        if (btn) {
+          const active = (p === periodo);
+          btn.className = active
+            ? 'px-2 py-2 rounded-lg text-xs font-extrabold bg-[#8b1e2d] text-white shadow-sm transition text-center'
+            : 'px-2 py-2 rounded-lg text-xs font-extrabold text-slate-600 hover:text-slate-900 transition text-center';
+        }
+      });
+      cargarDashboard();
+    }
+
+    function cambiarMesEspecificoDashboard(mesVal) {
+      dashMesEspecifico = mesVal || '';
+      if (dashMesEspecifico) {
+        dashPeriodoActivo = 'ultimo_mes';
+        ['diario', 'ultimo_mes', 'historico'].forEach(p => {
+          const btn = document.getElementById(`btnDashPeriodo-${p}`);
+          if (btn) {
+            btn.className = (p === 'ultimo_mes')
+              ? 'px-2 py-2 rounded-lg text-xs font-extrabold bg-[#8b1e2d] text-white shadow-sm transition text-center'
+              : 'px-2 py-2 rounded-lg text-xs font-extrabold text-slate-600 hover:text-slate-900 transition text-center';
+          }
+        });
+      }
+      cargarDashboard();
+    }
+
+    function cambiarCultoDashboard(culto) {
+      dashCultoFiltro = culto;
+      ['ambos', '11:00', '18:30'].forEach(c => {
+        const btn = document.getElementById(`btnDashCulto-${c}`);
+        if (btn) {
+          btn.className = (c === culto)
+            ? 'px-2 py-2 rounded-lg text-xs font-extrabold bg-[#8b1e2d] text-white shadow-sm transition'
+            : 'px-2 py-2 rounded-lg text-xs font-extrabold text-slate-600 hover:text-slate-900 transition';
+        }
+      });
+      // También sincronizar el filtro del plano esquemático
+      if (culto === '11:00' || culto === '18:30' || culto === 'ambos') {
+        setFiltroPlano(culto);
+      }
+      if (statsGlobales) {
+        const sectoresData = statsGlobales.sectores || statsGlobales.zonas || [];
+        renderChartZonas(sectoresData);
+        renderChartCaptadoras(statsGlobales.captadoras || []);
+        renderTablaDetalleZonas(sectoresData);
+      }
+    }
+
+    function toggleSeccionDashboard(key) {
+      dashSeccionesVisibles[key] = !dashSeccionesVisibles[key];
+      const secEl = document.getElementById(`dashSection-${key}`);
+      const btnEl = document.getElementById(`toggleSec-${key}`);
+      const labels = {
+        kpis: 'Tarjetas KPI',
+        sectores: 'Gráfico Sectores',
+        captadoras: 'Gráfico Captadoras',
+        plano: 'Plano Esquemático',
+        tabla: 'Tabla Detalle'
+      };
+      if (secEl) {
+        secEl.classList.toggle('hidden', !dashSeccionesVisibles[key]);
+      }
+      if (btnEl) {
+        const active = dashSeccionesVisibles[key];
+        btnEl.className = active
+          ? 'px-3 py-1.5 rounded-lg text-xs font-extrabold bg-rose-50 text-[#8b1e2d] border border-rose-200 transition'
+          : 'px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-100 text-slate-400 border border-slate-200 transition';
+        btnEl.textContent = `${active ? '✓' : '✕'} ${labels[key] || key}`;
+      }
+    }
+
     async function cargarDashboard() {
       try {
-        const res = await fetch('/dashboard/stats', { headers: getAuthHeaders() });
+        const params = new URLSearchParams();
+        params.set('periodo', dashPeriodoActivo || 'ultimo_mes');
+        if (dashMesEspecifico) {
+          params.set('mes', dashMesEspecifico);
+        }
+        const res = await fetch(`/dashboard/stats?${params.toString()}`, { headers: getAuthHeaders() });
         const data = await res.json();
         if (!res.ok || data.status !== 'success') throw new Error(data.message || 'Error al cargar stats');
 
         statsGlobales = data;
+
+        // Actualizar insignia de periodo y contadores
+        const badgeEl = document.getElementById('dashPeriodoBadge');
+        if (badgeEl && data.etiqueta_periodo) {
+          badgeEl.textContent = data.etiqueta_periodo;
+        }
+        if (data.conteos_globales) {
+          const cDiario = document.getElementById('badgeCountDiario');
+          const cUltMes = document.getElementById('badgeCountUltimoMes');
+          const cHist = document.getElementById('badgeCountHistorico');
+          if (cDiario) cDiario.textContent = `(${data.conteos_globales.diario || 0} reg.)`;
+          if (cUltMes) cUltMes.textContent = `(${data.conteos_globales.ultimo_mes || 0} reg.)`;
+          if (cHist) cHist.textContent = `(${data.conteos_globales.historico || 0} reg.)`;
+        }
+
+        // Poblar selector de meses disponibles
+        const mesSelect = document.getElementById('dashMesSelect');
+        if (mesSelect && Array.isArray(data.meses_disponibles)) {
+          const currentVal = dashMesEspecifico || '';
+          const nombresMeses = {
+            '01': 'Enero', '02': 'Febrero', '03': 'Marzo', '04': 'Abril',
+            '05': 'Mayo', '06': 'Junio', '07': 'Julio', '08': 'Agosto',
+            '09': 'Septiembre', '10': 'Octubre', '11': 'Noviembre', '12': 'Diciembre'
+          };
+          mesSelect.innerHTML = `<option value="">Automático según periodo (${data.ultimo_mes_auto || 'Actual'})</option>` +
+            data.meses_disponibles.map(ym => {
+              const [y, m] = ym.split('-');
+              const label = `${nombresMeses[m] || m} ${y} (${ym})`;
+              return `<option value="${ym}" ${ym === currentVal ? 'selected' : ''}>📆 Solo ${label}</option>`;
+            }).join('');
+        }
 
         // Renderizar KPIs
         const r = data.resumen;
@@ -1544,14 +1814,19 @@
       const data11 = zonas.map(z => z.c11);
       const data18 = zonas.map(z => z.c18);
 
+      const datasets = [];
+      if (dashCultoFiltro === 'ambos' || dashCultoFiltro === '11:00') {
+        datasets.push({ label: '11:00', data: data11, backgroundColor: '#8b1e2d', borderRadius: 4 });
+      }
+      if (dashCultoFiltro === 'ambos' || dashCultoFiltro === '18:30') {
+        datasets.push({ label: '18:30', data: data18, backgroundColor: '#e88d90', borderRadius: 4 });
+      }
+
       chartZonasInstance = new Chart(ctx, {
         type: 'bar',
         data: {
           labels,
-          datasets: [
-            { label: '11:00', data: data11, backgroundColor: '#8b1e2d', borderRadius: 4 },
-            { label: '18:30', data: data18, backgroundColor: '#e88d90', borderRadius: 4 }
-          ]
+          datasets
         },
         options: {
           responsive: true,
@@ -1575,14 +1850,19 @@
       const data11 = top.map(c => c.c11);
       const data18 = top.map(c => c.c18);
 
+      const datasets = [];
+      if (dashCultoFiltro === 'ambos' || dashCultoFiltro === '11:00') {
+        datasets.push({ label: '11:00', data: data11, backgroundColor: '#8b1e2d', borderRadius: 4 });
+      }
+      if (dashCultoFiltro === 'ambos' || dashCultoFiltro === '18:30') {
+        datasets.push({ label: '18:30', data: data18, backgroundColor: '#e88d90', borderRadius: 4 });
+      }
+
       chartCaptadorasInstance = new Chart(ctx, {
         type: 'bar',
         data: {
           labels,
-          datasets: [
-            { label: '11:00', data: data11, backgroundColor: '#8b1e2d', borderRadius: 4 },
-            { label: '18:30', data: data18, backgroundColor: '#e88d90', borderRadius: 4 }
-          ]
+          datasets
         },
         options: {
           indexAxis: 'y',
@@ -1639,18 +1919,28 @@
     function renderTablaDetalleZonas(zonas) {
       const tbody = document.getElementById('tablaDetalleZonas');
       tbody.innerHTML = zonas.map(z => {
+        const secNum = z.sector || z.zona;
+        const mesonItem = RANGOS_SECTORES.find(x => x.id === Number(secNum));
+        const mesonNombre = z.meson || (mesonItem ? mesonItem.meson : 'Mesón');
         const cap11 = z.captadoras_11.length ? z.captadoras_11.join(', ') : '—';
         const cap18 = z.captadoras_18.length ? z.captadoras_18.join(', ') : '—';
 
+        const c11Val = (dashCultoFiltro === '18:30') ? '—' : z.c11;
+        const c18Val = (dashCultoFiltro === '11:00') ? '—' : z.c18;
+        const totalVal = (dashCultoFiltro === '11:00') ? z.c11 : (dashCultoFiltro === '18:30' ? z.c18 : z.total);
+
         return `
           <tr class="hover:bg-slate-50 transition">
-            <td class="py-2.5 px-3 font-extrabold text-slate-900">Sector ${z.sector || z.zona}</td>
+            <td class="py-2.5 px-3">
+              <div class="font-extrabold text-slate-900">Sector ${secNum}</div>
+              <div class="text-[11px] font-semibold text-slate-500">${mesonNombre}</div>
+            </td>
             <td class="py-2.5 px-3 font-semibold text-slate-500">${z.filas}</td>
             <td class="py-2.5 px-3 text-slate-700">${cap11}</td>
-            <td class="py-2.5 px-3 text-center font-bold">${z.c11}</td>
+            <td class="py-2.5 px-3 text-center font-bold">${c11Val}</td>
             <td class="py-2.5 px-3 text-slate-700">${cap18}</td>
-            <td class="py-2.5 px-3 text-center font-bold">${z.c18}</td>
-            <td class="py-2.5 px-3 text-right font-black text-[#8b1e2d]">${z.total}</td>
+            <td class="py-2.5 px-3 text-center font-bold">${c18Val}</td>
+            <td class="py-2.5 px-3 text-right font-black text-[#8b1e2d]">${totalVal}</td>
           </tr>
         `;
       }).join('');
