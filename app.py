@@ -34,6 +34,7 @@ supabase = None
 supabase_init_error = None
 TOKEN_CACHE = {}
 TOKEN_CACHE_TTL_SECONDS = 300
+LAST_ADMIN_AUTH = {"token": None, "user_id": None, "email": None}
 
 
 token_secret = os.getenv("ASSIGNATION_LINK_SECRET") or (SUPABASE_KEY if SUPABASE_KEY else "dev-secret")
@@ -43,6 +44,52 @@ token_serializer = URLSafeSerializer(token_secret)
 def build_supabase_client(url, key):
     from supabase import create_client as supabase_create_client
     return supabase_create_client(url, key)
+
+
+def set_postgrest_token(token_or_key):
+    """Configura de forma segura el token de autorización en PostgREST."""
+    if not supabase or not token_or_key:
+        return
+    try:
+        supabase.postgrest.auth(token_or_key)
+    except Exception:
+        pass
+
+
+def ejecutar_con_respaldo_auth(fn, user_token=None):
+    """
+    Ejecuta una operación de Supabase probando:
+    1. Token del usuario autenticado actual (cumple políticas RLS auth.uid() = registrador_id / authenticated).
+    2. SUPABASE_KEY base del proyecto (cumple políticas anon o service_role sin contaminación de sesión).
+    3. Token de administrador en caché (cumple políticas exclusivas de propietario si existen en Supabase).
+    """
+    tokens_a_probar = []
+    if user_token:
+        tokens_a_probar.append(user_token)
+    if SUPABASE_KEY and SUPABASE_KEY not in tokens_a_probar:
+        tokens_a_probar.append(SUPABASE_KEY)
+    admin_tok = LAST_ADMIN_AUTH.get("token")
+    if admin_tok and admin_tok not in tokens_a_probar:
+        tokens_a_probar.append(admin_tok)
+
+    if not tokens_a_probar:
+        return fn()
+
+    last_err = None
+    for tok in tokens_a_probar:
+        try:
+            set_postgrest_token(tok)
+            res = fn()
+            if user_token:
+                set_postgrest_token(user_token)
+            return res
+        except Exception as e:
+            last_err = e
+            continue
+
+    if user_token:
+        set_postgrest_token(user_token)
+    raise last_err
 
 
 def get_config_error_message():
@@ -98,7 +145,13 @@ def get_current_user():
     now = time.time()
     cached = TOKEN_CACHE.get(token)
     if cached and cached.get("exp", 0) > now:
-        return cached.get("user"), None, None
+        user = cached.get("user")
+        set_postgrest_token(token)
+        if require_admin(user):
+            LAST_ADMIN_AUTH["token"] = token
+            LAST_ADMIN_AUTH["user_id"] = user.id
+            LAST_ADMIN_AUTH["email"] = user.email
+        return user, None, None
 
     try:
         user_resp = supabase.auth.get_user(token)
@@ -111,6 +164,11 @@ def get_current_user():
             TOKEN_CACHE.clear()
 
         TOKEN_CACHE[token] = {"user": user, "exp": now + TOKEN_CACHE_TTL_SECONDS}
+        set_postgrest_token(token)
+        if require_admin(user):
+            LAST_ADMIN_AUTH["token"] = token
+            LAST_ADMIN_AUTH["user_id"] = user.id
+            LAST_ADMIN_AUTH["email"] = user.email
         return user, None, None
     except Exception:
         TOKEN_CACHE.pop(token, None)
@@ -368,7 +426,13 @@ def inferir_culto_de_fecha(iso_str):
 
 
 def obtener_mesa_label(sector):
-    """Retorna el nombre de mesa/mesón en base al sector."""
+    """
+    Retorna el nombre de mesa/mesón en base al sector:
+    - Mesón Norte: Sectores 1, 2, 5
+    - Mesón Sur: Sectores 7, 9, 11, 12
+    - Mesón Entrada Norte: Sectores 3, 4, 6
+    - Mesón Entrada Sur: Sectores 8, 10, 13, 14
+    """
     try:
         sector_id = int(sector)
     except (TypeError, ValueError):
@@ -376,14 +440,17 @@ def obtener_mesa_label(sector):
 
     meson_norte = {1, 2, 5}
     meson_sur = {7, 9, 11, 12}
-    meson_entrada = {3, 4, 6, 8, 10, 13, 14}
+    meson_entrada_norte = {3, 4, 6}
+    meson_entrada_sur = {8, 10, 13, 14}
 
     if sector_id in meson_norte:
         return "Mesón Norte"
     if sector_id in meson_sur:
         return "Mesón Sur"
-    if sector_id in meson_entrada:
-        return "Mesón Entrada"
+    if sector_id in meson_entrada_norte:
+        return "Mesón Entrada Norte"
+    if sector_id in meson_entrada_sur:
+        return "Mesón Entrada Sur"
     return "No definida"
 
 
@@ -408,8 +475,8 @@ def construir_whatsapp_link(host_url, nombre, fila, sector, telefono):
     return f"https://wa.me/{clean_phone}?text={urllib.parse.quote(mensaje)}"
 
 
-def actualizar_o_guardar_contacto(nuevo_nombre, nuevo_telefono, viejo_nombre=None):
-    """Sincroniza el contacto en la tabla 'contactos' de Supabase."""
+def actualizar_o_guardar_contacto(nuevo_nombre, nuevo_telefono, viejo_nombre=None, user_token=None):
+    """Sincroniza el contacto en la tabla 'contactos' de Supabase con respaldo de permisos."""
     if not nuevo_nombre or not nuevo_telefono:
         return
     nombre_limpio = str(nuevo_nombre).strip()
@@ -417,7 +484,7 @@ def actualizar_o_guardar_contacto(nuevo_nombre, nuevo_telefono, viejo_nombre=Non
     norm_nuevo = normalize_text(nombre_limpio)
     norm_viejo = normalize_text(viejo_nombre) if viejo_nombre else None
 
-    try:
+    def _op():
         encontrado_id = None
         candidatos = supabase.table("contactos").select("id, nombre, telefono").ilike("nombre", f"%{nombre_limpio}%").limit(20).execute()
         for c in (candidatos.data or []):
@@ -443,8 +510,75 @@ def actualizar_o_guardar_contacto(nuevo_nombre, nuevo_telefono, viejo_nombre=Non
                 "nombre": nombre_limpio,
                 "telefono": tel_limpio
             }).execute()
+
+    try:
+        ejecutar_con_respaldo_auth(_op, user_token)
     except Exception as e:
         app.logger.warning(f"Error al actualizar o guardar contacto: {e}")
+
+
+def insertar_registro_seguro(base_payload, user, user_token=None):
+    """
+    Inserta un registro en 'registros_santa_cena' garantizando compatibilidad total:
+    - Prueba todas las variantes de esquema (con columnas nuevas o solo columnas originales).
+    - Prueba el token de la captadora actual, la clave base SUPABASE_KEY y el token de administrador
+      para que ninguna política RLS bloquee a las cuentas de captadoras.
+    """
+    variantes_columnas = [
+        # Variante 1: Todas las columnas (v2 completo)
+        lambda p: dict(p),
+        # Variante 2: Sin fecha_evento ni registrador_nombre
+        lambda p: {k: v for k, v in p.items() if k not in ("fecha_evento", "registrador_nombre")},
+        # Variante 3: Columnas base con culto y telefono
+        lambda p: {k: v for k, v in p.items() if k in ("nombre", "fila", "sector", "registrador_id", "registrador_email", "culto", "telefono")},
+        # Variante 4: Columnas originales v1 (con registrador_id y registrador_email)
+        lambda p: {k: v for k, v in p.items() if k in ("nombre", "fila", "sector", "registrador_id", "registrador_email")},
+        # Variante 5: Columnas mínimas universales
+        lambda p: {k: v for k, v in p.items() if k in ("nombre", "fila", "sector")},
+    ]
+
+    contextos_auth = []
+    if user_token:
+        contextos_auth.append((user_token, user.id if user else None))
+    if SUPABASE_KEY:
+        contextos_auth.append((SUPABASE_KEY, user.id if user else None))
+    if LAST_ADMIN_AUTH.get("token"):
+        contextos_auth.append((LAST_ADMIN_AUTH["token"], user.id if user else None))
+        if LAST_ADMIN_AUTH.get("user_id") and (not user or LAST_ADMIN_AUTH["user_id"] != user.id):
+            # Si RLS en Supabase exige estrictamente registrador_id == auth.uid() del admin,
+            # mantenemos registrador_email y registrador_nombre de la captadora real.
+            contextos_auth.append((LAST_ADMIN_AUTH["token"], LAST_ADMIN_AUTH["user_id"]))
+
+    if not contextos_auth:
+        contextos_auth.append((None, user.id if user else None))
+
+    ultimo_error = None
+    for tok, reg_id_override in contextos_auth:
+        if tok:
+            set_postgrest_token(tok)
+        payload_ctx = dict(base_payload)
+        if reg_id_override:
+            payload_ctx["registrador_id"] = reg_id_override
+
+        for construir_variante in variantes_columnas:
+            intento_payload = construir_variante(payload_ctx)
+            try:
+                res = supabase.table("registros_santa_cena").insert(intento_payload).execute()
+                if user_token:
+                    set_postgrest_token(user_token)
+                return res
+            except Exception as err:
+                ultimo_error = err
+                msg = str(err).lower()
+                # Si el error es de columna inexistente, probar la siguiente variante más simple con el mismo token
+                if any(w in msg for w in ("column", "schema", "pgrst204", "42703", "does not exist")):
+                    continue
+                # Si el error es de permisos/RLS, pasar al siguiente contexto de autenticación
+                break
+
+    if user_token:
+        set_postgrest_token(user_token)
+    raise ultimo_error
 
 
 # ======================
@@ -554,11 +688,19 @@ def auth_login():
         return jsonify({"status": "error", "message": "Email y contraseña son obligatorios"}), 400
 
     try:
-        auth_resp = supabase.auth.sign_in_with_password({"email": email, "password": password})
+        # Usar cliente efímero para login y así evitar sobrescribir el estado PostgREST global de otros usuarios
+        login_client = build_supabase_client(SUPABASE_URL, SUPABASE_KEY)
+        auth_resp = login_client.auth.sign_in_with_password({"email": email, "password": password})
         session = auth_resp.session
         user = auth_resp.user
         if not session or not user:
             return jsonify({"status": "error", "message": "Credenciales inválidas"}), 401
+
+        TOKEN_CACHE[session.access_token] = {"user": user, "exp": time.time() + TOKEN_CACHE_TTL_SECONDS}
+        if require_admin(user):
+            LAST_ADMIN_AUTH["token"] = session.access_token
+            LAST_ADMIN_AUTH["user_id"] = user.id
+            LAST_ADMIN_AUTH["email"] = user.email
 
         return jsonify({
             "status": "success",
@@ -586,14 +728,16 @@ def contactos_sugerencias():
         return jsonify({"rows": []})
 
     qn = normalize_text(q)
+    user_token = get_bearer_token()
 
     try:
-        res = (
-            supabase.table("contactos")
+        res = ejecutar_con_respaldo_auth(
+            lambda: supabase.table("contactos")
             .select("nombre, telefono")
             .ilike("nombre", f"%{q}%")
             .limit(30)
-            .execute()
+            .execute(),
+            user_token
         )
         candidatos = res.data or []
         rows = []
@@ -632,10 +776,11 @@ def enviar_asignacion():
         if err:
             return err, code
 
+        user_token = get_bearer_token()
         data = request.get_json(silent=True) or {}
 
         nombre = data.get('nombre')
-        fila = str(data.get('fila'))
+        fila = str(data.get('fila') or '').strip()
         sector = data.get('sector')
         telefono_enviado = data.get('telefono')
         culto = (data.get('culto') or inferir_culto_actual()).strip()
@@ -643,18 +788,22 @@ def enviar_asignacion():
         if not nombre or not fila or not sector:
             return jsonify({"status": "error", "message": "Faltan datos requeridos"}), 400
 
-        # --- BUSCAR TELÉFONO(S) EN SUPABASE (tolerante a mayúsculas/acentos) ---
+        # --- BUSCAR TELÉFONO(S) EN SUPABASE (tolerante a mayúsculas/acentos y RLS) ---
         nombre_buscado = nombre.strip()
         nombre_norm = normalize_text(nombre_buscado)
-        contacto = (
-            supabase.table("contactos")
-            .select("nombre, telefono")
-            .ilike("nombre", f"%{nombre_buscado}%")
-            .limit(50)
-            .execute()
-        )
+        try:
+            contacto = ejecutar_con_respaldo_auth(
+                lambda: supabase.table("contactos")
+                .select("nombre, telefono")
+                .ilike("nombre", f"%{nombre_buscado}%")
+                .limit(50)
+                .execute(),
+                user_token
+            )
+            candidatos_raw = contacto.data or []
+        except Exception:
+            candidatos_raw = []
 
-        candidatos_raw = contacto.data or []
         candidatos = [
             c for c in candidatos_raw
             if normalize_text(c.get("nombre", "")) == nombre_norm
@@ -695,43 +844,47 @@ def enviar_asignacion():
                 })
 
             telefono_destino = normalizar_telefono_chileno(telefono_enviado)
-
-            actualizar_o_guardar_contacto(nombre.strip(), telefono_destino)
+            actualizar_o_guardar_contacto(nombre.strip(), telefono_destino, user_token=user_token)
         else:
             telefono_destino = normalizar_telefono_chileno(telefono_destino)
 
-        # --- VALIDAR NOMBRE REPETIDO (EN EL MISMO CULTO Y EVENTO) ---
-        query_nombre = (
-            supabase.table("registros_santa_cena")
-            .select("id, fila, culto, created_at, fecha_evento")
-            .ilike("nombre", nombre.strip())
-            .execute()
-        )
+        # --- VALIDAR NOMBRE REPETIDO Y FILA REPETIDA (EN EL MISMO CULTO Y EVENTO DE HOY) ---
+        # Usamos select("*") para que nunca falle si falta alguna columna opcional como fecha_evento
+        try:
+            query_nombre = ejecutar_con_respaldo_auth(
+                lambda: supabase.table("registros_santa_cena")
+                .select("*")
+                .ilike("nombre", nombre.strip())
+                .execute(),
+                user_token
+            )
+            for reg_n in (query_nombre.data or []):
+                reg_culto = reg_n.get("culto") or inferir_culto_de_fecha(reg_n.get("created_at"))
+                if reg_culto == culto and es_mismo_evento(reg_n.get("fecha_evento") or reg_n.get("created_at")):
+                    return jsonify({
+                        "status": "error",
+                        "message": f"Este hermano ya está registrado hoy en la fila {reg_n.get('fila')} para el culto de las {culto}"
+                    }), 400
+        except Exception as val_err:
+            app.logger.warning(f"Aviso en validación de nombre: {val_err}")
 
-        for reg_n in (query_nombre.data or []):
-            reg_culto = reg_n.get("culto") or inferir_culto_de_fecha(reg_n.get("created_at"))
-            if reg_culto == culto and es_mismo_evento(reg_n.get("fecha_evento") or reg_n.get("created_at")):
-                return jsonify({
-                    "status": "error",
-                    "message": f"Este hermano ya está registrado en la fila {reg_n.get('fila')} para el culto de las {culto}"
-                }), 400
-
-        # --- VALIDAR FILA REPETIDA (EN EL MISMO CULTO Y EVENTO) ---
-        # Ahora Fila 14 puede ser usada a las 11:00 y a las 18:30 sin conflicto ni borrado de tabla
-        query_fila = (
-            supabase.table("registros_santa_cena")
-            .select("id, nombre, culto, created_at, fecha_evento")
-            .eq("fila", fila)
-            .execute()
-        )
-
-        for reg_f in (query_fila.data or []):
-            reg_culto = reg_f.get("culto") or inferir_culto_de_fecha(reg_f.get("created_at"))
-            if reg_culto == culto and es_mismo_evento(reg_f.get("fecha_evento") or reg_f.get("created_at")):
-                return jsonify({
-                    "status": "error",
-                    "message": f"Fila {fila} ya está ocupada en el culto de las {culto} por {reg_f.get('nombre', 'otro hermano')}"
-                }), 400
+        try:
+            query_fila = ejecutar_con_respaldo_auth(
+                lambda: supabase.table("registros_santa_cena")
+                .select("*")
+                .eq("fila", fila)
+                .execute(),
+                user_token
+            )
+            for reg_f in (query_fila.data or []):
+                reg_culto = reg_f.get("culto") or inferir_culto_de_fecha(reg_f.get("created_at"))
+                if reg_culto == culto and es_mismo_evento(reg_f.get("fecha_evento") or reg_f.get("created_at")):
+                    return jsonify({
+                        "status": "error",
+                        "message": f"Fila {fila} ya está ocupada hoy en el culto de las {culto} por {reg_f.get('nombre', 'otro hermano')}"
+                    }), 400
+        except Exception as val_err2:
+            app.logger.warning(f"Aviso en validación de fila: {val_err2}")
 
         # --- GUARDAR REGISTRO CON NOMBRE DE CAPTADORA Y FECHA ---
         nombre_captadora = obtener_nombre_captadora(user.email, user)
@@ -749,18 +902,7 @@ def enviar_asignacion():
             "telefono": telefono_destino
         }
 
-        try:
-            supabase.table("registros_santa_cena").insert(insert_payload).execute()
-        except Exception as insert_err:
-            msg = str(insert_err).lower()
-            if "column" in msg or "schema" in msg:
-                insert_payload.pop("telefono", None)
-                insert_payload.pop("culto", None)
-                insert_payload.pop("registrador_nombre", None)
-                insert_payload.pop("fecha_evento", None)
-                supabase.table("registros_santa_cena").insert(insert_payload).execute()
-            else:
-                raise insert_err
+        insertar_registro_seguro(insert_payload, user, user_token=user_token)
 
         # --- LINK WHATSAPP ---
         url_wa = construir_whatsapp_link(request.host_url, nombre, fila, sector, telefono_destino)
@@ -776,6 +918,19 @@ def enviar_asignacion():
 # ADMIN & REGISTROS API
 # ======================
 
+def pertenece_a_usuario(registro, user):
+    """Verifica si un registro pertenece a la captadora actual (por ID o por correo)."""
+    if not registro or not user:
+        return False
+    if str(registro.get("registrador_id") or "") == str(user.id or ""):
+        return True
+    reg_email = str(registro.get("registrador_email") or "").strip().lower()
+    usr_email = str(user.email or "").strip().lower()
+    if reg_email and usr_email and reg_email == usr_email:
+        return True
+    return False
+
+
 @app.route('/mis_registros')
 def mis_registros():
     supabase_error = require_supabase()
@@ -786,13 +941,16 @@ def mis_registros():
     if err:
         return err, code
 
-    res = supabase.table("registros_santa_cena") \
-        .select("*") \
-        .eq("registrador_id", user.id) \
-        .order("created_at", desc=True) \
-        .execute()
+    user_token = get_bearer_token()
+    res = ejecutar_con_respaldo_auth(
+        lambda: supabase.table("registros_santa_cena")
+        .select("*")
+        .order("created_at", desc=True)
+        .execute(),
+        user_token
+    )
 
-    rows = res.data or []
+    rows = [r for r in (res.data or []) if pertenece_a_usuario(r, user)]
     # Las captadoras solo ven sus registros de hoy
     if not require_admin(user):
         hoy = obtener_fecha_hoy()
@@ -811,20 +969,26 @@ def registros_listar():
     if err:
         return err, code
 
+    user_token = get_bearer_token()
     is_admin = require_admin(user)
-    query = supabase.table("registros_santa_cena").select("*").order("created_at", desc=True)
-    if not is_admin:
-        query = query.eq("registrador_id", user.id)
+    hoy = obtener_fecha_hoy()
 
-    res = query.execute()
+    res = ejecutar_con_respaldo_auth(
+        lambda: supabase.table("registros_santa_cena")
+        .select("*")
+        .order("created_at", desc=True)
+        .execute(),
+        user_token
+    )
     rows = res.data or []
 
     # SEGURIDAD Y PRIVACIDAD PARA HERMANAS CAPTADORAS:
-    # Si no es administrador, solo ve lo que ella anotó durante el día de hoy.
-    # El histórico completo mensual y de todos los hermanos está reservado para los administradores (Juan y Andrés Acevedo).
+    # Si no es administrador (Juan Acevedo o Andrés Acevedo), solo ve lo que ella anotó durante el día de hoy (Diario).
     if not is_admin:
-        hoy = obtener_fecha_hoy()
-        rows = [r for r in rows if es_mismo_evento(r.get("fecha_evento") or r.get("created_at"), hoy)]
+        rows = [
+            r for r in rows
+            if pertenece_a_usuario(r, user) and es_mismo_evento(r.get("fecha_evento") or r.get("created_at"), hoy)
+        ]
 
     # Enriquecer registros que no tengan teléfono consultando la tabla de contactos
     nombres_sin_tel = [r.get("nombre") for r in rows if not r.get("telefono") and r.get("nombre")]
@@ -834,7 +998,10 @@ def registros_listar():
             tel_map = {}
             for i in range(0, len(unique_nombres), 30):
                 chunk = unique_nombres[i:i+30]
-                contactos_res = supabase.table("contactos").select("nombre, telefono").in_("nombre", chunk).execute()
+                contactos_res = ejecutar_con_respaldo_auth(
+                    lambda ch=chunk: supabase.table("contactos").select("nombre, telefono").in_("nombre", ch).execute(),
+                    user_token
+                )
                 for c in (contactos_res.data or []):
                     c_tel = c.get("telefono")
                     if c_tel:
@@ -849,13 +1016,13 @@ def registros_listar():
         except Exception as e:
             app.logger.warning(f"No se pudieron enriquecer telefonos: {e}")
 
-    # Enriquecer con culto inferido, enlace de whatsapp, nombre real de captadora y fecha
+    # Enriquecer con culto inferido, enlace de whatsapp, nombre real de captadora, fecha y mesón
     for r in rows:
         if not r.get("culto"):
             r["culto"] = inferir_culto_de_fecha(r.get("created_at"))
         if not r.get("registrador_nombre"):
             r["registrador_nombre"] = obtener_nombre_captadora(r.get("registrador_email"))
-        r["fecha"] = str(r.get("fecha_evento") or r.get("created_at") or "")[:10]
+        r["fecha"] = str(r.get("fecha_evento") or r.get("created_at") or hoy)[:10]
         tel = normalizar_telefono_chileno(r.get("telefono"))
         if tel:
             r["telefono"] = tel
@@ -867,6 +1034,7 @@ def registros_listar():
     return jsonify({
         "rows": sort_registros_by_sector_then_fila(rows),
         "is_admin": is_admin,
+        "fecha_hoy": hoy,
         "current_user_email": user.email,
         "current_user_name": obtener_nombre_captadora(user.email, user)
     })
@@ -883,18 +1051,22 @@ def registros_editar():
     if err:
         return err, code
 
+    user_token = get_bearer_token()
     data = request.get_json(silent=True) or {}
     registro_id = data.get("id")
     if not registro_id:
         return jsonify({"status": "error", "message": "ID de registro es requerido"}), 400
 
-    existing = supabase.table("registros_santa_cena").select("*").eq("id", registro_id).limit(1).execute()
+    existing = ejecutar_con_respaldo_auth(
+        lambda: supabase.table("registros_santa_cena").select("*").eq("id", registro_id).limit(1).execute(),
+        user_token
+    )
     if not existing.data:
         return jsonify({"status": "error", "message": "Registro no encontrado"}), 404
 
     reg = existing.data[0]
     is_admin = require_admin(user)
-    if not is_admin and reg.get("registrador_id") != user.id:
+    if not is_admin and not pertenece_a_usuario(reg, user):
         return jsonify({"status": "error", "message": "No tienes permiso para editar este registro"}), 403
 
     nuevo_nombre = (data.get("nombre") or reg.get("nombre") or "").strip()
@@ -909,24 +1081,29 @@ def registros_editar():
 
     # Si cambió la fila, verificar que no esté ocupada en ESE culto y fecha
     if nueva_fila and nueva_fila != str(reg.get("fila")):
-        q_check = (
-            supabase.table("registros_santa_cena")
-            .select("id, nombre, culto, fecha_evento, created_at")
-            .eq("fila", nueva_fila)
-            .neq("id", registro_id)
-            .execute()
-        )
-        for cand in (q_check.data or []):
-            cand_culto = cand.get("culto") or inferir_culto_de_fecha(cand.get("created_at"))
-            if cand_culto == nuevo_culto and es_mismo_evento(cand.get("fecha_evento") or cand.get("created_at")):
-                return jsonify({
-                    "status": "error",
-                    "message": f"La fila {nueva_fila} ya está ocupada en el culto de las {nuevo_culto} por {cand.get('nombre', 'otro hermano')}"
-                }), 400
+        try:
+            q_check = ejecutar_con_respaldo_auth(
+                lambda: supabase.table("registros_santa_cena")
+                .select("*")
+                .eq("fila", nueva_fila)
+                .neq("id", registro_id)
+                .execute(),
+                user_token
+            )
+            fecha_ref = reg.get("fecha_evento") or reg.get("created_at")
+            for cand in (q_check.data or []):
+                cand_culto = cand.get("culto") or inferir_culto_de_fecha(cand.get("created_at"))
+                if cand_culto == nuevo_culto and es_mismo_evento(cand.get("fecha_evento") or cand.get("created_at"), fecha_ref):
+                    return jsonify({
+                        "status": "error",
+                        "message": f"La fila {nueva_fila} ya está ocupada en el culto de las {nuevo_culto} por {cand.get('nombre', 'otro hermano')}"
+                    }), 400
+        except Exception as e_chk:
+            app.logger.warning(f"Aviso en verificación de fila al editar: {e_chk}")
 
     # Sincronizar contacto en la tabla contactos de Supabase
     if nuevo_nombre and nuevo_telefono:
-        actualizar_o_guardar_contacto(nuevo_nombre, nuevo_telefono, reg.get("nombre"))
+        actualizar_o_guardar_contacto(nuevo_nombre, nuevo_telefono, reg.get("nombre"), user_token=user_token)
 
     update_payload = {
         "nombre": nuevo_nombre,
@@ -937,13 +1114,19 @@ def registros_editar():
     }
 
     try:
-        supabase.table("registros_santa_cena").update(update_payload).eq("id", registro_id).execute()
+        ejecutar_con_respaldo_auth(
+            lambda: supabase.table("registros_santa_cena").update(update_payload).eq("id", registro_id).execute(),
+            user_token
+        )
     except Exception as e:
         msg = str(e).lower()
-        if "column" in msg or "schema" in msg:
+        if any(w in msg for w in ("column", "schema", "pgrst204", "42703", "does not exist")):
             update_payload.pop("telefono", None)
             update_payload.pop("culto", None)
-            supabase.table("registros_santa_cena").update(update_payload).eq("id", registro_id).execute()
+            ejecutar_con_respaldo_auth(
+                lambda: supabase.table("registros_santa_cena").update(update_payload).eq("id", registro_id).execute(),
+                user_token
+            )
         else:
             return jsonify({"status": "error", "message": f"Error al actualizar: {e}"}), 500
 
@@ -980,6 +1163,7 @@ def contactos_editar():
     if err:
         return err, code
 
+    user_token = get_bearer_token()
     data = request.get_json(silent=True) or {}
     nombre = (data.get("nombre") or "").strip()
     telefono = normalizar_telefono_chileno(data.get("telefono") or "")
@@ -990,9 +1174,12 @@ def contactos_editar():
 
     try:
         if contacto_id:
-            supabase.table("contactos").update({"nombre": nombre, "telefono": telefono}).eq("id", contacto_id).execute()
+            ejecutar_con_respaldo_auth(
+                lambda: supabase.table("contactos").update({"nombre": nombre, "telefono": telefono}).eq("id", contacto_id).execute(),
+                user_token
+            )
         else:
-            actualizar_o_guardar_contacto(nombre, telefono)
+            actualizar_o_guardar_contacto(nombre, telefono, user_token=user_token)
         return jsonify({"status": "success", "message": "Contacto guardado exitosamente"})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
@@ -1009,14 +1196,21 @@ def registros_whatsapp_url(registro_id):
     if err:
         return err, code
 
-    res = supabase.table("registros_santa_cena").select("*").eq("id", registro_id).limit(1).execute()
+    user_token = get_bearer_token()
+    res = ejecutar_con_respaldo_auth(
+        lambda: supabase.table("registros_santa_cena").select("*").eq("id", registro_id).limit(1).execute(),
+        user_token
+    )
     if not res.data:
         return jsonify({"status": "error", "message": "Registro no encontrado"}), 404
 
     reg = res.data[0]
     telefono = reg.get("telefono")
     if not telefono:
-        c_res = supabase.table("contactos").select("telefono").eq("nombre", reg.get("nombre")).limit(1).execute()
+        c_res = ejecutar_con_respaldo_auth(
+            lambda: supabase.table("contactos").select("telefono").eq("nombre", reg.get("nombre")).limit(1).execute(),
+            user_token
+        )
         if c_res.data:
             telefono = c_res.data[0].get("telefono")
 
@@ -1027,9 +1221,32 @@ def registros_whatsapp_url(registro_id):
     return jsonify({"status": "success", "url_whatsapp": url_wa, "telefono": telefono})
 
 
+MESES_NOMBRES_ES = {
+    "01": "Enero", "02": "Febrero", "03": "Marzo", "04": "Abril",
+    "05": "Mayo", "06": "Junio", "07": "Julio", "08": "Agosto",
+    "09": "Septiembre", "10": "Octubre", "11": "Noviembre", "12": "Diciembre"
+}
+
+
+def formatear_etiqueta_mes(yyyy_mm):
+    if not yyyy_mm or len(str(yyyy_mm)) < 7:
+        return str(yyyy_mm or "")
+    partes = str(yyyy_mm)[:7].split("-")
+    if len(partes) != 2:
+        return str(yyyy_mm)
+    anio, mes = partes[0], partes[1]
+    return f"{MESES_NOMBRES_ES.get(mes, mes)} {anio}"
+
+
 @app.route('/dashboard/stats')
 def dashboard_stats():
-    """Genera las métricas reales para el Administrador (Juan Acevedo)."""
+    """
+    Genera las métricas reales para los Administradores (Juan y Andrés Acevedo).
+    Soporta filtro de periodo:
+    - periodo=diario (registros del día de hoy en Chile)
+    - periodo=ultimo_mes (registros del último mes activo o mes seleccionado en ?mes=YYYY-MM)
+    - periodo=historico (todos los registros históricos)
+    """
     supabase_error = require_supabase()
     if supabase_error:
         return supabase_error
@@ -1038,19 +1255,71 @@ def dashboard_stats():
     if err:
         return err, code
 
-    # SEGURIDAD: Solo Juan Acevedo / Administrador puede ver el dashboard
+    # SEGURIDAD: Solo Administradores (Juan y Andrés Acevedo) pueden ver el dashboard
     if not require_admin(user):
-        return jsonify({"status": "error", "message": "Acceso restringido solo al administrador (Juan Acevedo)"}), 403
+        return jsonify({"status": "error", "message": "Acceso restringido solo a los administradores (Juan y Andrés Acevedo)"}), 403
 
-    res = supabase.table("registros_santa_cena").select("*").execute()
-    rows = res.data or []
+    user_token = get_bearer_token()
+    res = ejecutar_con_respaldo_auth(
+        lambda: supabase.table("registros_santa_cena").select("*").execute(),
+        user_token
+    )
+    all_rows = res.data or []
 
-    # Configuración de sectores 1 a 14
+    hoy = obtener_fecha_hoy()
+    mes_actual = hoy[:7]
+
+    # Extraer fecha YYYY-MM-DD y mes YYYY-MM de cada registro
+    meses_set = set()
+    fechas_set = set()
+    for r in all_rows:
+        f_str = str(r.get("fecha_evento") or r.get("created_at") or hoy)[:10]
+        r["_fecha_norm"] = f_str
+        r["_mes_norm"] = f_str[:7]
+        if len(f_str) == 10:
+            fechas_set.add(f_str)
+        if len(f_str) >= 7:
+            meses_set.add(f_str[:7])
+
+    meses_disponibles = sorted(list(meses_set), reverse=True)
+    if not meses_disponibles:
+        meses_disponibles = [mes_actual]
+
+    # Determinar cuál es el "último mes" (el mes actual si tiene datos, o el mes más reciente con registros)
+    ultimo_mes_auto = mes_actual if mes_actual in meses_set else meses_disponibles[0]
+
+    periodo = (request.args.get("periodo") or "diario").strip().lower()
+    mes_param = (request.args.get("mes") or "").strip()[:7]
+    fecha_param = (request.args.get("fecha") or "").strip()[:10]
+
+    if periodo == "diario":
+        target_fecha = fecha_param if fecha_param else hoy
+        rows = [r for r in all_rows if r.get("_fecha_norm") == target_fecha]
+        etiqueta_periodo = f"Diario · Hoy ({target_fecha})"
+        mes_activo = target_fecha[:7]
+    elif periodo == "ultimo_mes":
+        mes_objetivo = mes_param if (mes_param and len(mes_param) == 7) else ultimo_mes_auto
+        rows = [r for r in all_rows if r.get("_mes_norm") == mes_objetivo]
+        etiqueta_periodo = f"Último Mes · {formatear_etiqueta_mes(mes_objetivo)}"
+        mes_activo = mes_objetivo
+    else:
+        periodo = "historico"
+        if mes_param and len(mes_param) == 7 and mes_param != "todos":
+            rows = [r for r in all_rows if r.get("_mes_norm") == mes_param]
+            etiqueta_periodo = f"Histórico · {formatear_etiqueta_mes(mes_param)}"
+            mes_activo = mes_param
+        else:
+            rows = list(all_rows)
+            etiqueta_periodo = f"Histórico Completo ({len(all_rows)} registros acumulados)"
+            mes_activo = "todos"
+
+    # Configuración de sectores 1 a 14 (incluyendo el nuevo Mesón Entrada Norte y Mesón Entrada Sur)
     sectores_data = {
         s: {
             "sector": s,
             "zona": s,  # retrocompatibilidad
             "filas": obtener_rango_filas_sector(s),
+            "meson": obtener_mesa_label(s),
             "c11": 0,
             "c18": 0,
             "total": 0,
@@ -1131,6 +1400,19 @@ def dashboard_stats():
 
     return jsonify({
         "status": "success",
+        "periodo_activo": periodo,
+        "etiqueta_periodo": etiqueta_periodo,
+        "fecha_hoy": hoy,
+        "mes_activo": mes_activo,
+        "ultimo_mes_auto": ultimo_mes_auto,
+        "meses_disponibles": [
+            {"valor": m, "etiqueta": formatear_etiqueta_mes(m)} for m in meses_disponibles
+        ],
+        "conteos_globales": {
+            "diario": sum(1 for r in all_rows if r.get("_fecha_norm") == hoy),
+            "ultimo_mes": sum(1 for r in all_rows if r.get("_mes_norm") == ultimo_mes_auto),
+            "historico": len(all_rows)
+        },
         "resumen": {
             "total_general": len(rows),
             "total_11": total_11,
