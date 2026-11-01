@@ -416,10 +416,14 @@ def obtener_rango_filas_zona(z):
 
 
 def inferir_culto_actual():
-    """Infiere si estamos en el culto de 11:00 o 18:30 según la hora actual en Chile (UTC-3)."""
+    """
+    Infiere la reunión por defecto según la hora actual en Chile (UTC-3):
+    - Hasta las 14:00 hrs (2:00 PM) inclusive -> '11:00' (Primera reunión)
+    - Pasadas las 14:00 hrs -> '18:30' (Segunda reunión)
+    """
     try:
         ahora = datetime.datetime.now(TZ_CHILE)
-        if ahora.hour < 15:
+        if ahora.hour < 14 or (ahora.hour == 14 and ahora.minute == 0):
             return "11:00"
         return "18:30"
     except Exception:
@@ -427,7 +431,7 @@ def inferir_culto_actual():
 
 
 def inferir_culto_de_fecha(iso_str):
-    """Infiere culto desde un timestamp ISO de base de datos convirtiendo a hora de Chile."""
+    """Infiere culto desde un timestamp ISO convirtiendo a hora de Chile (corte 14:00 hrs)."""
     if not iso_str:
         return "11:00"
     try:
@@ -438,15 +442,20 @@ def inferir_culto_de_fecha(iso_str):
         dt = datetime.datetime.fromisoformat(iso_norm)
         if dt.tzinfo is not None:
             dt = dt.astimezone(TZ_CHILE)
-        return "18:30" if dt.hour >= 15 else "11:00"
+        if dt.hour < 14 or (dt.hour == 14 and dt.minute == 0):
+            return "11:00"
+        return "18:30"
     except Exception:
         try:
             s = str(iso_str)
             time_part = s.split("T")[1] if "T" in s else s.split(" ")[1]
-            hour = int(time_part.split(":")[0])
+            parts_t = time_part.split(":")
+            hour = int(parts_t[0])
+            minute = int(parts_t[1]) if len(parts_t) > 1 else 0
+            # Timestamps UTC en Supabase: 17:00 UTC equivale a 14:00 hora Chile (UTC-3)
             if "Z" in s or "+" in s or ("-" in s[10:]):
-                return "18:30" if hour >= 18 else "11:00"
-            return "18:30" if hour >= 15 else "11:00"
+                return "11:00" if (hour < 17 or (hour == 17 and minute == 0)) else "18:30"
+            return "11:00" if (hour < 14 or (hour == 14 and minute == 0)) else "18:30"
         except Exception:
             return "11:00"
 
@@ -658,6 +667,14 @@ def guardar_registro_ilimitado(base_payload, user, user_token=None):
             return row_h
         except Exception as err_h:
             msg_h = str(err_h).lower()
+            # Si salta índice único compuesto (fecha_evento, culto, fila) por doble clic simultáneo
+            if "23505" in msg_h or "idx_hist_sc_unico_fila_culto_fecha" in msg_h:
+                if user_token:
+                    set_postgrest_token(user_token)
+                raise ValueError(
+                    f"La Fila {base_payload.get('fila')} ya está ocupada hoy en la reunión de las {base_payload.get('culto')} hrs. "
+                    "Solo se permite 1 persona por fila en cada reunión."
+                )
             # Si la tabla historico_santa_cena aún no ha sido creada en Supabase, pasar directo al paso 2
             if any(w in msg_h for w in ("historico_santa_cena", "pgrst205", "42p01", "relation", "could not find the table")):
                 tabla_hist_existe = False
@@ -817,6 +834,43 @@ def obtener_todos_los_registros(user_token=None):
         pass
 
     return hist_rows + reg_rows + sys_rows
+
+
+def _filas_equivalentes(f1, f2):
+    """Compara números de fila normalizando ceros a la izquierda (ej. '025' == '25')."""
+    s1 = str(f1 or "").strip()
+    s2 = str(f2 or "").strip()
+    if not s1 or not s2:
+        return False
+    if s1.isdigit() and s2.isdigit():
+        return int(s1) == int(s2)
+    return s1.lower() == s2.lower()
+
+
+def buscar_ocupante_fila_en_reunion(fila, culto, fecha_objetivo=None, excluir_id=None, user_token=None):
+    """
+    Verifica si una fila ya tiene a una persona inscrita en la MISMA reunión ('11:00' o '18:30')
+    y en la MISMA fecha (por defecto hoy en Chile).
+    - Permite que la misma fila se ocupe en 11:00 y también en 18:30 (con la misma u otra persona).
+    - Permite que la misma fila se ocupe en fechas distintas (histórico mensual).
+    """
+    fila_str = str(fila or "").strip()
+    culto_str = str(culto or "11:00").strip()
+    fecha_ref = extraer_fecha_chile(fecha_objetivo) if fecha_objetivo else obtener_fecha_hoy()
+
+    todos = obtener_todos_los_registros(user_token)
+    for reg in todos:
+        if excluir_id is not None and str(reg.get("id") or "") == str(excluir_id):
+            continue
+        if not _filas_equivalentes(reg.get("fila"), fila_str):
+            continue
+        reg_fecha = extraer_fecha_chile(reg.get("fecha_evento") or reg.get("created_at"))
+        if reg_fecha and reg_fecha != fecha_ref:
+            continue
+        reg_culto = str(reg.get("culto") or inferir_culto_de_fecha(reg.get("created_at"))).strip()
+        if reg_culto == culto_str:
+            return reg
+    return None
 
 
 def obtener_registro_por_id(registro_id, user_token=None):
@@ -1217,6 +1271,27 @@ def enviar_asignacion():
         if not nombre or not fila or not sector:
             return jsonify({"status": "error", "message": "Faltan datos requeridos"}), 400
 
+        # --- REGLA DE NEGOCIO: 1 SOLA PERSONA POR CADA FILA DENTRO DE LA MISMA REUNIÓN HOY ---
+        # Permite inscribir a la misma u otra persona en la misma fila si es en la otra reunión (11:00 vs 18:30),
+        # y permite que cada hermana inscriba a todas las personas que necesite en distintas filas.
+        fecha_hoy = obtener_fecha_hoy()
+        ocupante = buscar_ocupante_fila_en_reunion(
+            fila=fila,
+            culto=culto,
+            fecha_objetivo=fecha_hoy,
+            user_token=user_token
+        )
+        if ocupante:
+            otra_reunion = "18:30" if culto == "11:00" else "11:00"
+            return jsonify({
+                "status": "error",
+                "message": (
+                    f"La Fila {fila} ya está ocupada hoy en la reunión de las {culto} hrs "
+                    f"(asignada a {ocupante.get('nombre', 'otro hermano')}). "
+                    f"Solo se permite 1 persona por fila en cada reunión (elige otra fila o cambia a las {otra_reunion} hrs)."
+                )
+            }), 400
+
         # --- BUSCAR TELÉFONO(S) EN SUPABASE (tolerante a mayúsculas/acentos, ignora filas __SYS_) ---
         nombre_buscado = nombre
         nombre_norm = normalize_text(nombre_buscado)
@@ -1272,11 +1347,8 @@ def enviar_asignacion():
                 "message": "Ingrese un número de teléfono válido para enviar el WhatsApp."
             })
 
-        # --- INSCRIPCIÓN ILIMITADA EN NUEVA TABLA 'historico_santa_cena' (+ RESPALDO AUTOMÁTICO) ---
-        # Sin bloqueo por cantidad de inscritos, fila repetida ni nombre repetido:
-        # permite inscribir y enviar WhatsApp a TODAS las personas que sean necesarias.
+        # --- GUARDAR EN NUEVA TABLA 'historico_santa_cena' (+ RESPALDO AUTOMÁTICO SI FALTA SQL) ---
         nombre_captadora = obtener_nombre_captadora(user.email, user)
-        fecha_hoy = obtener_fecha_hoy()
 
         insert_payload = {
             "nombre": nombre_buscado,
@@ -1301,6 +1373,8 @@ def enviar_asignacion():
             "registro": reg_guardado
         })
 
+    except ValueError as ve:
+        return jsonify({"status": "error", "message": str(ve)}), 400
     except Exception as e:
         app.logger.exception('Error en /enviar_asignacion')
         return jsonify({"status": "error", "message": str(e) or 'Error interno al registrar'}), 500
@@ -1427,7 +1501,7 @@ def registros_listar():
 
 @app.route('/registros/editar', methods=['POST'])
 def registros_editar():
-    """Permite editar nombre, teléfono, fila, sector o culto de un registro sin restricción de personas por fila."""
+    """Permite editar nombre, teléfono, fila, sector o culto validando 1 persona por fila en cada reunión."""
     supabase_error = require_supabase()
     if supabase_error:
         return supabase_error
@@ -1459,6 +1533,25 @@ def registros_editar():
     nuevo_sector = data.get("sector")
     if not nuevo_sector or str(nueva_fila) != str(reg.get("fila")):
         nuevo_sector = obtener_sector_de_fila(nueva_fila) or reg.get("sector")
+
+    # Validar que la nueva combinación (fecha, culto, fila) no esté ya ocupada por otro registro
+    if nueva_fila:
+        fecha_reg = extraer_fecha_chile(reg.get("fecha_evento") or reg.get("created_at")) or obtener_fecha_hoy()
+        ocupante = buscar_ocupante_fila_en_reunion(
+            fila=nueva_fila,
+            culto=nuevo_culto,
+            fecha_objetivo=fecha_reg,
+            excluir_id=registro_id,
+            user_token=user_token
+        )
+        if ocupante:
+            return jsonify({
+                "status": "error",
+                "message": (
+                    f"La Fila {nueva_fila} ya está ocupada en la reunión de las {nuevo_culto} hrs "
+                    f"por {ocupante.get('nombre', 'otro hermano')}. Solo puede haber 1 persona por fila en cada reunión."
+                )
+            }), 400
 
     # Sincronizar contacto en la tabla contactos de Supabase
     if nuevo_nombre and nuevo_telefono:
