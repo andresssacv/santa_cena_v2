@@ -206,6 +206,15 @@
                 const h = new Date().getHours();
                 return h < 15 ? '11:00' : '18:30';
             });
+            const [enviando, setEnviando] = useState(false);
+            const [ultimosRegistrados, setUltimosRegistrados] = useState(() => {
+                try {
+                    const saved = sessionStorage.getItem('santa_cena_ultimos_reg');
+                    return saved ? JSON.parse(saved) : [];
+                } catch (_) {
+                    return [];
+                }
+            });
             // Compatibilidad con código previo (evita ReferenceError por nombre antiguo).
             const setSugerenciasNombre = setNombreSugerencias;
             
@@ -339,7 +348,27 @@
                 setMostrarListaSugerencias(false);
             };
         
-            const enviarAlBackend = async (telefonoSeleccionado = null) => {
+            const abrirEnlaceWhatsApp = (url) => {
+                if (!url) return;
+                try {
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.target = '_blank';
+                    a.rel = 'noopener noreferrer';
+                    a.style.display = 'none';
+                    document.body.appendChild(a);
+                    a.click();
+                    setTimeout(() => {
+                        try { document.body.removeChild(a); } catch (_) {}
+                    }, 300);
+                } catch (_) {
+                    window.open(url, '_blank');
+                }
+            };
+
+            const enviarAlBackend = async (telefonoSeleccionado = null, esReintentoInterno = false) => {
+                if (enviando && !esReintentoInterno) return;
+
                 const accessToken = localStorage.getItem('accessToken');
                 if (!accessToken) {
                     alert('Debes iniciar sesión para registrar asignaciones.');
@@ -368,6 +397,8 @@
                     telefono: telefonoParaEnviar,
                     culto: cultoSeleccionado
                 };
+
+                setEnviando(true);
             
                 try {
                     const response = await fetch('/enviar_asignacion', {
@@ -429,19 +460,34 @@
 
                         const telefonoElegido = opciones[indice];
                         setTelefono(telefonoElegido);
-                        await enviarAlBackend(telefonoElegido);
+                        await enviarAlBackend(telefonoElegido, true);
                     } else if (data.status === 'need_phone') {
                         setMostrandoCampoTelefono(true);
                         alert("Este hermano no está en la base de datos. Por favor, ingresa su teléfono para guardarlo.");
                     } else if (data.status === 'success') {
-                        window.open(data.url_whatsapp, '_blank');
-                        // Limpiamos todo para el siguiente registro
+                        const nuevoItem = {
+                            id_temp: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                            nombre: payload.nombre,
+                            fila: payload.fila,
+                            sector: payload.sector,
+                            url_whatsapp: data.url_whatsapp
+                        };
+                        setUltimosRegistrados(prev => {
+                            const next = [nuevoItem, ...prev].slice(0, 6);
+                            try { sessionStorage.setItem('santa_cena_ultimos_reg', JSON.stringify(next)); } catch (_) {}
+                            return next;
+                        });
+
+                        // Limpiar formulario de inmediato para poder inscribir al siguiente hermano sin recargar
                         setNombreHermano("");
                         setTrayNumber("");
                         setTelefono("");
                         setMostrandoCampoTelefono(false);
                         setSugerenciasNombre([]);
                         setMostrarListaSugerencias(false);
+
+                        // Abrir WhatsApp de forma compatible con móviles (iOS/Android) y escritorio
+                        abrirEnlaceWhatsApp(data.url_whatsapp);
                     } else {
                         alert(data.message);
                     }
@@ -451,6 +497,10 @@
                     alert(esErrorRed
                         ? 'No fue posible conectar con el servidor. Verifica tu conexión e inténtalo nuevamente.'
                         : (e?.message || 'No se pudo registrar la asignación.'));
+                } finally {
+                    if (!esReintentoInterno) {
+                        setEnviando(false);
+                    }
                 }
             };
             
@@ -782,6 +832,9 @@
                                                 onChange={(e) => {
                                                     const formatted = capitalizeWords(e.target.value);
                                                     setNombreHermano(formatted);
+                                                    if (!mostrandoCampoTelefono) {
+                                                        setTelefono("");
+                                                    }
                                                     setMostrarListaSugerencias(true);
                                                 }}
                                                 onFocus={() => {
@@ -841,11 +894,51 @@
                                     {/* Botón Principal de Envío */}
                                     <button 
                                         type="button"
+                                        disabled={enviando}
                                         onClick={() => enviarAlBackend()}
-                                        className="w-full bg-[#8b1e2d] hover:bg-[#701824] active:scale-[0.98] text-white font-black py-3 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 text-sm uppercase tracking-wide"
+                                        className={`w-full ${enviando ? 'bg-slate-400 cursor-wait' : 'bg-[#8b1e2d] hover:bg-[#701824] active:scale-[0.98]'} text-white font-black py-3 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 text-sm uppercase tracking-wide`}
                                     >
-                                        <span>📲</span> Registrar y Enviar WhatsApp
+                                        <span>{enviando ? '⏳' : '📲'}</span> {enviando ? 'Guardando Registro...' : 'Registrar y Enviar WhatsApp'}
                                     </button>
+
+                                    {/* Lista rápida de recién inscritos en esta sesión (garantiza envío de WhatsApp en iOS/Android sin bloqueo de ventanas emergentes) */}
+                                    {ultimosRegistrados.length > 0 && (
+                                        <div className="bg-emerald-50/80 border border-emerald-200 rounded-xl p-2.5 space-y-1.5">
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800">
+                                                    ✅ Inscritos recién ({ultimosRegistrados.length}) · Listo para el siguiente
+                                                </span>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setUltimosRegistrados([]);
+                                                        try { sessionStorage.removeItem('santa_cena_ultimos_reg'); } catch (_) {}
+                                                    }}
+                                                    className="text-[10px] font-bold text-slate-400 hover:text-slate-600"
+                                                >
+                                                    Limpiar
+                                                </button>
+                                            </div>
+                                            <div className="max-h-28 overflow-y-auto space-y-1 pr-0.5">
+                                                {ultimosRegistrados.map((u) => (
+                                                    <div key={u.id_temp} className="flex items-center justify-between gap-2 bg-white px-2.5 py-1.5 rounded-lg border border-emerald-100 text-xs shadow-sm">
+                                                        <div className="truncate">
+                                                            <span className="font-extrabold text-slate-800">{u.nombre}</span>
+                                                            <span className="text-[10px] font-bold text-slate-500 ml-1.5">S{u.sector} · F#{u.fila}</span>
+                                                        </div>
+                                                        <a
+                                                            href={u.url_whatsapp}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="flex-shrink-0 px-2.5 py-1 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[11px] inline-flex items-center gap-1 shadow-sm"
+                                                        >
+                                                            📲 WhatsApp
+                                                        </a>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             ) : (
                                 <div className="p-4 bg-[#8b1e2d] text-white rounded-xl shadow-lg text-center">

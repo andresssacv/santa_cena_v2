@@ -1775,9 +1775,12 @@
           };
           mesSelect.innerHTML = `<option value="">Automático según periodo (${data.ultimo_mes_auto || 'Actual'})</option>` +
             data.meses_disponibles.map(ym => {
-              const [y, m] = ym.split('-');
-              const label = `${nombresMeses[m] || m} ${y} (${ym})`;
-              return `<option value="${ym}" ${ym === currentVal ? 'selected' : ''}>📆 Solo ${label}</option>`;
+              const val = typeof ym === 'string' ? ym : (ym?.valor || '');
+              const [y, m] = String(val).split('-');
+              const label = typeof ym === 'object' && ym?.etiqueta
+                ? `${ym.etiqueta} (${val})`
+                : `${nombresMeses[m] || m} ${y || ''} (${val})`;
+              return `<option value="${val}" ${val === currentVal ? 'selected' : ''}>📆 Solo ${label}</option>`;
             }).join('');
         }
 
