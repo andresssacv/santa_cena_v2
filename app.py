@@ -667,7 +667,14 @@ def guardar_registro_ilimitado(base_payload, user, user_token=None):
             return row_h
         except Exception as err_h:
             msg_h = str(err_h).lower()
-            # Si salta índice único compuesto (fecha_evento, culto, fila) por doble clic simultáneo
+            # Si salta índice único compuesto en historico_santa_cena por doble clic simultáneo
+            if "idx_hist_sc_unico_persona_culto_fecha" in msg_h:
+                if user_token:
+                    set_postgrest_token(user_token)
+                raise ValueError(
+                    f"{base_payload.get('nombre')} ya está inscrito(a) hoy para la reunión de las {base_payload.get('culto')} hrs. "
+                    "No se puede inscribir a una misma persona en 2 filas distintas."
+                )
             if "23505" in msg_h or "idx_hist_sc_unico_fila_culto_fecha" in msg_h:
                 if user_token:
                     set_postgrest_token(user_token)
@@ -847,29 +854,59 @@ def _filas_equivalentes(f1, f2):
     return s1.lower() == s2.lower()
 
 
-def buscar_ocupante_fila_en_reunion(fila, culto, fecha_objetivo=None, excluir_id=None, user_token=None):
+def validar_disponibilidad_reunion(fila, nombre, culto, fecha_objetivo=None, excluir_id=None, user_token=None):
     """
-    Verifica si una fila ya tiene a una persona inscrita en la MISMA reunión ('11:00' o '18:30')
-    y en la MISMA fecha (por defecto hoy en Chile).
-    - Permite que la misma fila se ocupe en 11:00 y también en 18:30 (con la misma u otra persona).
-    - Permite que la misma fila se ocupe en fechas distintas (histórico mensual).
+    Valida en una sola lectura las 2 reglas de negocio dentro de la MISMA reunión ('11:00' o '18:30') y MISMA fecha:
+    1. No se puede inscribir a una misma persona en 2 filas distintas (ni repetirla en la misma reunión).
+    2. No se puede inscribir a 2 o más personas en la misma fila en la misma reunión.
+    (Entre reuniones distintas —11:00 vs 18:30— o en fechas distintas, sí se permite libremente).
+    Retorna el mensaje de error (str) si viola alguna regla, o None si está disponible.
     """
     fila_str = str(fila or "").strip()
+    nombre_str = str(nombre or "").strip()
+    nombre_norm = normalize_text(nombre_str)
     culto_str = str(culto or "11:00").strip()
     fecha_ref = extraer_fecha_chile(fecha_objetivo) if fecha_objetivo else obtener_fecha_hoy()
+    otra_reunion = "18:30" if culto_str == "11:00" else "11:00"
 
     todos = obtener_todos_los_registros(user_token)
+    ocupante_fila = None
+    registro_persona = None
+
     for reg in todos:
         if excluir_id is not None and str(reg.get("id") or "") == str(excluir_id):
-            continue
-        if not _filas_equivalentes(reg.get("fila"), fila_str):
             continue
         reg_fecha = extraer_fecha_chile(reg.get("fecha_evento") or reg.get("created_at"))
         if reg_fecha and reg_fecha != fecha_ref:
             continue
         reg_culto = str(reg.get("culto") or inferir_culto_de_fecha(reg.get("created_at"))).strip()
-        if reg_culto == culto_str:
-            return reg
+        if reg_culto != culto_str:
+            continue
+
+        if nombre_norm and normalize_text(reg.get("nombre") or "") == nombre_norm:
+            registro_persona = reg
+        if fila_str and _filas_equivalentes(reg.get("fila"), fila_str):
+            ocupante_fila = reg
+
+    if registro_persona:
+        fila_previa = registro_persona.get("fila", "")
+        if _filas_equivalentes(fila_previa, fila_str):
+            return (
+                f"{registro_persona.get('nombre', nombre_str)} ya está inscrito(a) hoy en la Fila {fila_previa} "
+                f"para la reunión de las {culto_str} hrs."
+            )
+        return (
+            f"{registro_persona.get('nombre', nombre_str)} ya está inscrito(a) hoy en la Fila {fila_previa} "
+            f"para la reunión de las {culto_str} hrs. No se puede inscribir a una misma persona en 2 filas distintas."
+        )
+
+    if ocupante_fila:
+        return (
+            f"La Fila {fila_str} ya está ocupada hoy en la reunión de las {culto_str} hrs "
+            f"(asignada a {ocupante_fila.get('nombre', 'otro hermano')}). "
+            f"Solo se permite 1 persona por fila en cada reunión (elige otra fila o cambia a las {otra_reunion} hrs)."
+        )
+
     return None
 
 
@@ -1271,25 +1308,22 @@ def enviar_asignacion():
         if not nombre or not fila or not sector:
             return jsonify({"status": "error", "message": "Faltan datos requeridos"}), 400
 
-        # --- REGLA DE NEGOCIO: 1 SOLA PERSONA POR CADA FILA DENTRO DE LA MISMA REUNIÓN HOY ---
-        # Permite inscribir a la misma u otra persona en la misma fila si es en la otra reunión (11:00 vs 18:30),
-        # y permite que cada hermana inscriba a todas las personas que necesite en distintas filas.
+        # --- REGLAS DE NEGOCIO POR REUNIÓN HOY (11:00 o 18:30) ---
+        # 1) No se puede inscribir a una misma persona en 2 filas distintas (ni repetirla en la misma reunión).
+        # 2) Solo se permite 1 persona por cada fila dentro de la misma reunión.
+        # (Entre reuniones distintas —11:00 vs 18:30— sí se puede usar la misma fila con la misma u otra persona).
         fecha_hoy = obtener_fecha_hoy()
-        ocupante = buscar_ocupante_fila_en_reunion(
+        error_validacion = validar_disponibilidad_reunion(
             fila=fila,
+            nombre=nombre,
             culto=culto,
             fecha_objetivo=fecha_hoy,
             user_token=user_token
         )
-        if ocupante:
-            otra_reunion = "18:30" if culto == "11:00" else "11:00"
+        if error_validacion:
             return jsonify({
                 "status": "error",
-                "message": (
-                    f"La Fila {fila} ya está ocupada hoy en la reunión de las {culto} hrs "
-                    f"(asignada a {ocupante.get('nombre', 'otro hermano')}). "
-                    f"Solo se permite 1 persona por fila en cada reunión (elige otra fila o cambia a las {otra_reunion} hrs)."
-                )
+                "message": error_validacion
             }), 400
 
         # --- BUSCAR TELÉFONO(S) EN SUPABASE (tolerante a mayúsculas/acentos, ignora filas __SYS_) ---
@@ -1534,23 +1568,21 @@ def registros_editar():
     if not nuevo_sector or str(nueva_fila) != str(reg.get("fila")):
         nuevo_sector = obtener_sector_de_fila(nueva_fila) or reg.get("sector")
 
-    # Validar que la nueva combinación (fecha, culto, fila) no esté ya ocupada por otro registro
-    if nueva_fila:
+    # Validar que en esa fecha y reunión ni la fila esté ocupada ni la persona esté en otra fila distinta
+    if nueva_fila or nuevo_nombre:
         fecha_reg = extraer_fecha_chile(reg.get("fecha_evento") or reg.get("created_at")) or obtener_fecha_hoy()
-        ocupante = buscar_ocupante_fila_en_reunion(
+        error_val_edit = validar_disponibilidad_reunion(
             fila=nueva_fila,
+            nombre=nuevo_nombre,
             culto=nuevo_culto,
             fecha_objetivo=fecha_reg,
             excluir_id=registro_id,
             user_token=user_token
         )
-        if ocupante:
+        if error_val_edit:
             return jsonify({
                 "status": "error",
-                "message": (
-                    f"La Fila {nueva_fila} ya está ocupada en la reunión de las {nuevo_culto} hrs "
-                    f"por {ocupante.get('nombre', 'otro hermano')}. Solo puede haber 1 persona por fila en cada reunión."
-                )
+                "message": error_val_edit
             }), 400
 
     # Sincronizar contacto en la tabla contactos de Supabase
