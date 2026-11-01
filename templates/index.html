@@ -202,10 +202,43 @@
             const [mostrandoCampoTelefono, setMostrandoCampoTelefono] = useState(false);
             const [nombreSugerencias, setNombreSugerencias] = useState([]);
             const [mostrarListaSugerencias, setMostrarListaSugerencias] = useState(false);
-            const [cultoSeleccionado, setCultoSeleccionado] = useState(() => {
-                const h = new Date().getHours();
-                return h < 15 ? '11:00' : '18:30';
-            });
+            const obtenerCultoPorHora = () => {
+                try {
+                    const partes = new Intl.DateTimeFormat('en-GB', {
+                        timeZone: 'America/Santiago',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        hour12: false
+                    }).format(new Date()).split(':');
+                    const h = parseInt(partes[0], 10);
+                    const m = parseInt(partes[1], 10) || 0;
+                    if (!Number.isNaN(h)) {
+                        // Hasta las 14:00 hrs (2:00 PM) inclusive -> 11:00; pasada esa hora -> 18:30
+                        return (h < 14 || (h === 14 && m === 0)) ? '11:00' : '18:30';
+                    }
+                } catch (_) {}
+                const ahora = new Date();
+                const h = ahora.getHours();
+                const m = ahora.getMinutes();
+                return (h < 14 || (h === 14 && m === 0)) ? '11:00' : '18:30';
+            };
+
+            const [cultoManual, setCultoManual] = useState(false);
+            const [cultoSeleccionado, setCultoSeleccionado] = useState(() => obtenerCultoPorHora());
+
+            // Si la pestaña queda abierta en el celular de la mañana a la tarde, pasar automáticamente a 18:30 tras las 14:00 hrs
+            useEffect(() => {
+                if (cultoManual) return;
+                const syncCulto = () => setCultoSeleccionado(obtenerCultoPorHora());
+                const interval = setInterval(syncCulto, 30000);
+                window.addEventListener('focus', syncCulto);
+                document.addEventListener('visibilitychange', syncCulto);
+                return () => {
+                    clearInterval(interval);
+                    window.removeEventListener('focus', syncCulto);
+                    document.removeEventListener('visibilitychange', syncCulto);
+                };
+            }, [cultoManual]);
             const [enviando, setEnviando] = useState(false);
             const [ultimosRegistrados, setUltimosRegistrados] = useState(() => {
                 try {
@@ -470,6 +503,7 @@
                             nombre: payload.nombre,
                             fila: payload.fila,
                             sector: payload.sector,
+                            culto: payload.culto,
                             url_whatsapp: data.url_whatsapp
                         };
                         setUltimosRegistrados(prev => {
@@ -711,14 +745,22 @@
                                     <div className="w-7 h-7 rounded-lg bg-[#8b1e2d] text-white flex items-center justify-center font-black text-xs shadow-sm">✝</div>
                                     <div>
                                         <h2 className="text-xs font-black text-slate-900 tracking-tight leading-none">Santa Cena 2026</h2>
-                                        <div className="flex items-center gap-1 mt-0.5">
+                                        <div className="inline-flex items-center gap-0.5 mt-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200">
                                             <button
                                                 type="button"
-                                                onClick={() => setCultoSeleccionado(cultoSeleccionado === '11:00' ? '18:30' : '11:00')}
-                                                className="text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-rose-50 text-[#8b1e2d] border border-rose-200/60 inline-flex items-center gap-1 active:scale-95 transition"
-                                                title="Cambiar culto"
+                                                onClick={() => { setCultoManual(true); setCultoSeleccionado('11:00'); }}
+                                                className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md transition ${cultoSeleccionado === '11:00' ? 'bg-[#8b1e2d] text-white shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                                                title="Primera reunión (11:00 hrs)"
                                             >
-                                                {cultoSeleccionado === '11:00' ? '☀️ 11:00' : '🌙 18:30'} ⇄
+                                                ☀️ 11:00
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => { setCultoManual(true); setCultoSeleccionado('18:30'); }}
+                                                className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md transition ${cultoSeleccionado === '18:30' ? 'bg-[#8b1e2d] text-white shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                                                title="Segunda reunión (18:30 hrs)"
+                                            >
+                                                🌙 18:30
                                             </button>
                                         </div>
                                     </div>
@@ -924,7 +966,7 @@
                                                     <div key={u.id_temp} className="flex items-center justify-between gap-2 bg-white px-2.5 py-1.5 rounded-lg border border-emerald-100 text-xs shadow-sm">
                                                         <div className="truncate">
                                                             <span className="font-extrabold text-slate-800">{u.nombre}</span>
-                                                            <span className="text-[10px] font-bold text-slate-500 ml-1.5">S{u.sector} · F#{u.fila}</span>
+                                                            <span className="text-[10px] font-bold text-slate-500 ml-1.5">S{u.sector} · F#{u.fila} · {u.culto || '11:00'}</span>
                                                         </div>
                                                         <a
                                                             href={u.url_whatsapp}
