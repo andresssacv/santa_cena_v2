@@ -316,10 +316,32 @@
 
                 const timer = setTimeout(async () => {
                     try {
-                        const res = await fetch(`/contactos/sugerencias?q=${encodeURIComponent(q)}`, {
-                            headers: { 'Authorization': `Bearer ${accessToken}` },
+                        let tokActual = localStorage.getItem('accessToken') || accessToken;
+                        let res = await fetch(`/contactos/sugerencias?q=${encodeURIComponent(q)}`, {
+                            headers: { 'Authorization': `Bearer ${tokActual}` },
                             signal: controller.signal
                         });
+                        if (res.status === 401) {
+                            const refTok = localStorage.getItem('refreshToken');
+                            if (refTok) {
+                                const rRef = await fetch('/auth/refresh', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ refresh_token: refTok })
+                                });
+                                if (rRef.ok) {
+                                    const dRef = await rRef.json();
+                                    if (dRef?.access_token) {
+                                        localStorage.setItem('accessToken', dRef.access_token);
+                                        if (dRef.refresh_token) localStorage.setItem('refreshToken', dRef.refresh_token);
+                                        res = await fetch(`/contactos/sugerencias?q=${encodeURIComponent(q)}`, {
+                                            headers: { 'Authorization': `Bearer ${dRef.access_token}` },
+                                            signal: controller.signal
+                                        });
+                                    }
+                                }
+                            }
+                        }
                         if (!res.ok) return;
                         const data = await res.json();
                         const rows = Array.isArray(data?.rows) ? data.rows : [];
@@ -434,7 +456,7 @@
                 setEnviando(true);
             
                 try {
-                    const response = await fetch('/enviar_asignacion', {
+                    let response = await fetch('/enviar_asignacion', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -442,6 +464,34 @@
                         },
                         body: JSON.stringify(payload)
                     });
+
+                    if (response.status === 401) {
+                        const refTok = localStorage.getItem('refreshToken');
+                        if (refTok) {
+                            try {
+                                const rRef = await fetch('/auth/refresh', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ refresh_token: refTok })
+                                });
+                                if (rRef.ok) {
+                                    const dRef = await rRef.json();
+                                    if (dRef?.access_token) {
+                                        localStorage.setItem('accessToken', dRef.access_token);
+                                        if (dRef.refresh_token) localStorage.setItem('refreshToken', dRef.refresh_token);
+                                        response = await fetch('/enviar_asignacion', {
+                                            method: 'POST',
+                                            headers: {
+                                                'Content-Type': 'application/json',
+                                                'Authorization': `Bearer ${dRef.access_token}`
+                                            },
+                                            body: JSON.stringify(payload)
+                                        });
+                                    }
+                                }
+                            } catch (_) {}
+                        }
+                    }
                     
                     const contentType = response.headers.get('content-type') || '';
                     let data = null;

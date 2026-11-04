@@ -127,14 +127,22 @@
         <!-- Filtros Rápidos -->
         <div class="flex flex-wrap items-center gap-2">
           
-          <!-- Selector Diario vs Histórico (Solo Administradores: Juan y Andrés Acevedo) -->
-          <div id="wrapperFiltroFecha" class="hidden inline-flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
-            <button type="button" id="btnModoDiario" onclick="cambiarModoRegistros('hoy')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold bg-[#8b1e2d] text-white shadow-sm transition">
-              📅 Diario (Hoy)
-            </button>
-            <button type="button" id="btnModoHistorico" onclick="cambiarModoRegistros('todos')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold text-slate-600 hover:text-slate-900 transition">
-              📜 Histórico
-            </button>
+          <!-- Selector Diario / Última Santa Cena / Histórico + Fecha Exacta (Solo Administradores: Juan y Andrés Acevedo) -->
+          <div id="wrapperFiltroFecha" class="hidden flex flex-wrap items-center gap-1.5">
+            <div class="inline-flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
+              <button type="button" id="btnModoDiario" onclick="cambiarModoRegistros('hoy')" class="px-2.5 py-1.5 rounded-lg text-xs font-extrabold bg-[#8b1e2d] text-white shadow-sm transition">
+                📅 Hoy
+              </button>
+              <button type="button" id="btnModoUltimaSC" onclick="cambiarModoRegistros('ultimo_evento')" class="px-2.5 py-1.5 rounded-lg text-xs font-extrabold text-slate-600 hover:text-slate-900 transition" title="Ver registros del último domingo de Santa Cena">
+                ⛪ Última SC
+              </button>
+              <button type="button" id="btnModoHistorico" onclick="cambiarModoRegistros('todos')" class="px-2.5 py-1.5 rounded-lg text-xs font-extrabold text-slate-600 hover:text-slate-900 transition">
+                📜 Histórico
+              </button>
+            </div>
+            <select id="filtroFechaEspecifica" onchange="seleccionarFechaRegistros(this.value)" class="bg-rose-50/70 border border-rose-200 rounded-xl px-2.5 py-2 text-xs font-extrabold text-[#8b1e2d] outline-none focus:border-[#8b1e2d]">
+              <option value="">📅 Elegir fecha...</option>
+            </select>
             <input type="hidden" id="filtroFecha" value="hoy" />
           </div>
 
@@ -215,67 +223,88 @@
     <!-- ======================================================== -->
     <section id="tab-dashboard" class="hidden space-y-4 sm:space-y-6">
 
-      <!-- Barra de Control del Dashboard: Periodo (Diario, Último Mes, Histórico) + Opciones de Visualización -->
+      <!-- Barra de Control del Dashboard: Periodo (Hoy, Última Santa Cena, Último Mes, Histórico) + Fecha Exacta + Informes PDF -->
       <div class="no-print bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
         <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3">
           <div>
-            <div class="flex items-center gap-2">
+            <div class="flex flex-wrap items-center gap-2">
               <span class="text-xs font-black uppercase tracking-wider text-[#8b1e2d]">Panel de Control del Dashboard</span>
-              <span id="dashPeriodoBadge" class="px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-rose-50 text-[#8b1e2d] border border-rose-200">Último Mes</span>
+              <span id="dashPeriodoBadge" class="px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-rose-50 text-[#8b1e2d] border border-rose-200">Última Santa Cena</span>
             </div>
-            <p class="text-xs text-slate-500 font-semibold mt-0.5">Elige el periodo de análisis (Diario, Último Mes o Histórico) y personaliza qué secciones mostrar.</p>
+            <p class="text-xs text-slate-500 font-semibold mt-0.5">Consulta cualquier domingo de Santa Cena anterior, el mes completo o todo el histórico, y descarga tus informes en PDF.</p>
           </div>
 
           <div class="flex flex-wrap items-center gap-2 w-full lg:w-auto">
-            <button onclick="descargarInformePDFEstructurado()" class="flex-1 sm:flex-initial px-4 py-2 bg-[#8b1e2d] text-white rounded-xl text-xs sm:text-sm font-extrabold hover:bg-[#701824] transition inline-flex items-center justify-center gap-2 shadow-sm">
+            <button onclick="descargarInformeDashboardPDF()" id="btnDescargarDashPDF" class="flex-1 sm:flex-initial px-3.5 py-2 bg-[#8b1e2d] text-white rounded-xl text-xs sm:text-sm font-extrabold hover:bg-[#701824] transition inline-flex items-center justify-center gap-1.5 shadow-sm">
               <span>📄</span>
-              <span>Descargar Informe Ejecutivo PDF</span>
+              <span>Informe PDF Captación</span>
             </button>
-            <button onclick="window.print()" class="px-3 py-2 bg-slate-900 text-white rounded-xl text-xs sm:text-sm font-bold hover:bg-black transition inline-flex items-center justify-center gap-1.5 shadow-sm">
+            <button onclick="descargarInformePDFEstructurado()" id="btnDescargarConteoPDFDash" class="flex-1 sm:flex-initial px-3.5 py-2 bg-slate-800 text-white rounded-xl text-xs sm:text-sm font-extrabold hover:bg-slate-950 transition inline-flex items-center justify-center gap-1.5 shadow-sm">
+              <span>📊</span>
+              <span>Informe PDF Estadísticas</span>
+            </button>
+            <button onclick="window.print()" class="px-3 py-2 bg-slate-100 text-slate-800 border border-slate-200 rounded-xl text-xs sm:text-sm font-bold hover:bg-slate-200 transition inline-flex items-center justify-center gap-1.5 shadow-sm">
               <span>🖨️</span>
-              <span class="hidden sm:inline">Imprimir Vista</span>
+              <span class="hidden sm:inline">Imprimir</span>
             </button>
           </div>
         </div>
 
-        <!-- Fila 1: Selector de Periodo (Diario / Último Mes / Histórico) + Selector de Mes Específico + Filtro Culto -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2 border-t border-slate-100">
-          <!-- Periodo -->
+        <!-- Aviso de error o estado de conexión del Dashboard (oculto por defecto) -->
+        <div id="dashErrorBanner" class="hidden bg-red-50 border border-red-200 text-red-700 px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center justify-between gap-2">
+          <span id="dashErrorTexto">Error al cargar estadísticas.</span>
+          <button type="button" onclick="cargarDashboard()" class="px-3 py-1 rounded-lg bg-red-600 text-white font-extrabold hover:bg-red-700">Reintentar</button>
+        </div>
+
+        <!-- Fila 1: Selector de Periodo + Fecha Exacta ("del otro día") + Mes Específico + Filtro Culto -->
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 pt-2 border-t border-slate-100">
+          <!-- 1. Periodo -->
           <div>
-            <label class="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">1. Periodo de Datos a Mostrar</label>
-            <div class="grid grid-cols-3 gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
-              <button type="button" id="btnDashPeriodo-diario" onclick="cambiarPeriodoDashboard('diario')" class="px-2 py-2 rounded-lg text-xs font-extrabold text-slate-600 hover:text-slate-900 transition text-center">
-                📅 Diario <span id="badgeCountDiario" class="block text-[10px] opacity-80 font-bold">(0)</span>
+            <label class="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">1. Periodo Rápido</label>
+            <div class="grid grid-cols-4 gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+              <button type="button" id="btnDashPeriodo-diario" onclick="cambiarPeriodoDashboard('diario')" class="px-1.5 py-2 rounded-lg text-[11px] font-extrabold text-slate-600 hover:text-slate-900 transition text-center leading-tight">
+                📅 Hoy <span id="badgeCountDiario" class="block text-[9px] opacity-80 font-bold">(0)</span>
               </button>
-              <button type="button" id="btnDashPeriodo-ultimo_mes" onclick="cambiarPeriodoDashboard('ultimo_mes')" class="px-2 py-2 rounded-lg text-xs font-extrabold bg-[#8b1e2d] text-white shadow-sm transition text-center">
-                📆 Último Mes <span id="badgeCountUltimoMes" class="block text-[10px] opacity-90 font-bold">(0)</span>
+              <button type="button" id="btnDashPeriodo-ultimo_evento" onclick="cambiarPeriodoDashboard('ultimo_evento')" class="px-1.5 py-2 rounded-lg text-[11px] font-extrabold bg-[#8b1e2d] text-white shadow-sm transition text-center leading-tight" title="Ver datos del último domingo de Santa Cena registrado">
+                ⛪ Últ. SC <span id="badgeCountUltimoEvento" class="block text-[9px] opacity-90 font-bold">(0)</span>
               </button>
-              <button type="button" id="btnDashPeriodo-historico" onclick="cambiarPeriodoDashboard('historico')" class="px-2 py-2 rounded-lg text-xs font-extrabold text-slate-600 hover:text-slate-900 transition text-center">
-                📜 Histórico <span id="badgeCountHistorico" class="block text-[10px] opacity-80 font-bold">(0)</span>
+              <button type="button" id="btnDashPeriodo-ultimo_mes" onclick="cambiarPeriodoDashboard('ultimo_mes')" class="px-1.5 py-2 rounded-lg text-[11px] font-extrabold text-slate-600 hover:text-slate-900 transition text-center leading-tight">
+                📆 Mes <span id="badgeCountUltimoMes" class="block text-[9px] opacity-80 font-bold">(0)</span>
+              </button>
+              <button type="button" id="btnDashPeriodo-historico" onclick="cambiarPeriodoDashboard('historico')" class="px-1.5 py-2 rounded-lg text-[11px] font-extrabold text-slate-600 hover:text-slate-900 transition text-center leading-tight">
+                📜 Hist. <span id="badgeCountHistorico" class="block text-[9px] opacity-80 font-bold">(0)</span>
               </button>
             </div>
           </div>
 
-          <!-- Selector de Mes Específico (opcional dentro de Último Mes / Histórico) -->
+          <!-- 2. Selector de Fecha Exacta (Domingos anteriores / "del otro día") -->
           <div>
-            <label class="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">2. Filtrar Mes Específico (Opcional)</label>
-            <select id="dashMesSelect" onchange="cambiarMesEspecificoDashboard(this.value)" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs sm:text-sm font-extrabold text-slate-800 outline-none focus:border-[#8b1e2d]">
-              <option value="">Automático según periodo seleccionado</option>
+            <label class="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">2. Elegir Día de Santa Cena</label>
+            <select id="dashFechaSelect" onchange="cambiarFechaEspecificaDashboard(this.value)" class="w-full bg-rose-50/60 border border-rose-200 rounded-xl px-3 py-2.5 text-xs sm:text-sm font-extrabold text-[#8b1e2d] outline-none focus:border-[#8b1e2d]">
+              <option value="">Según periodo seleccionado</option>
             </select>
           </div>
 
-          <!-- Selector de Culto Global del Dashboard -->
+          <!-- 3. Selector de Mes Específico -->
           <div>
-            <label class="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">3. Culto a Visualizar en Gráficos y Tabla</label>
+            <label class="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">3. Filtrar Mes Específico</label>
+            <select id="dashMesSelect" onchange="cambiarMesEspecificoDashboard(this.value)" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs sm:text-sm font-extrabold text-slate-800 outline-none focus:border-[#8b1e2d]">
+              <option value="">Automático según periodo</option>
+            </select>
+          </div>
+
+          <!-- 4. Selector de Culto Global del Dashboard -->
+          <div>
+            <label class="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">4. Culto en Gráficos y Tabla</label>
             <div class="grid grid-cols-3 gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
               <button type="button" id="btnDashCulto-ambos" onclick="cambiarCultoDashboard('ambos')" class="px-2 py-2 rounded-lg text-xs font-extrabold bg-[#8b1e2d] text-white shadow-sm transition">
-                Ambos Cultos
+                Ambos
               </button>
               <button type="button" id="btnDashCulto-11:00" onclick="cambiarCultoDashboard('11:00')" class="px-2 py-2 rounded-lg text-xs font-extrabold text-slate-600 hover:text-slate-900 transition">
-                ☀️ 11:00 hrs
+                ☀️ 11:00
               </button>
               <button type="button" id="btnDashCulto-18:30" onclick="cambiarCultoDashboard('18:30')" class="px-2 py-2 rounded-lg text-xs font-extrabold text-slate-600 hover:text-slate-900 transition">
-                🌙 18:30 hrs
+                🌙 18:30
               </button>
             </div>
           </div>
@@ -299,6 +328,9 @@
             </button>
             <button type="button" id="toggleSec-tabla" onclick="toggleSeccionDashboard('tabla')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold bg-rose-50 text-[#8b1e2d] border border-rose-200 transition">
               ✓ Tabla Detalle
+            </button>
+            <button type="button" id="toggleSec-historial" onclick="toggleSeccionDashboard('historial')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold bg-rose-50 text-[#8b1e2d] border border-rose-200 transition">
+              ✓ Fechas Históricas
             </button>
           </div>
         </div>
@@ -617,6 +649,34 @@
             </thead>
             <tbody id="tablaDetalleZonas" class="divide-y divide-slate-100 font-medium text-xs sm:text-sm">
               <!-- Renderizado dinámicamente -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- SECCIÓN 5: HISTORIAL DE SERVICIOS DE SANTA CENA POR FECHA -->
+      <div id="dashSection-historial" class="bg-white p-3.5 sm:p-5 rounded-2xl border border-slate-200 shadow-sm">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-3 sm:pb-4 border-b border-slate-100 gap-2">
+          <div>
+            <h3 class="text-xs sm:text-sm font-extrabold text-slate-900 tracking-wider uppercase">Historial de Servicios por Fecha de Santa Cena</h3>
+            <p class="text-[11px] sm:text-xs text-slate-500 font-medium">Selecciona cualquier domingo anterior para cargar su Dashboard completo e imprimir su informe</p>
+          </div>
+        </div>
+        <div class="mt-3 overflow-x-auto">
+          <table class="w-full text-left text-xs sm:text-sm text-slate-700">
+            <thead class="bg-slate-50 border-b border-slate-200 text-[11px] uppercase font-extrabold text-slate-500 tracking-wider">
+              <tr>
+                <th class="py-2.5 px-3">Fecha del Servicio</th>
+                <th class="py-2.5 px-3 text-center">11:00 hrs</th>
+                <th class="py-2.5 px-3 text-center">18:30 hrs</th>
+                <th class="py-2.5 px-3 text-center">Total Hermanos</th>
+                <th class="py-2.5 px-3 text-center">Captadoras</th>
+                <th class="py-2.5 px-3 text-center">Sectores</th>
+                <th class="py-2.5 px-3 text-right no-print">Acción Rápida</th>
+              </tr>
+            </thead>
+            <tbody id="tablaHistorialFechasDash" class="divide-y divide-slate-100 font-medium">
+              <tr><td colspan="7" class="py-6 text-center text-slate-400">Cargando fechas registradas...</td></tr>
             </tbody>
           </table>
         </div>
@@ -1227,8 +1287,12 @@
     let statsGlobales = null;
     let isAdminGlobal = false;
     let fechaHoyServidor = '';
+    let ultimaFechaEventoGlobal = '';
+    let fechasDisponiblesGlobal = [];
+    let dashAutoInicializado = false;
     let planoCultoFiltro = '11:00';
-    let dashPeriodoActivo = 'ultimo_mes';
+    let dashPeriodoActivo = 'ultimo_evento';
+    let dashFechaEspecifica = '';
     let dashMesEspecifico = '';
     let dashCultoFiltro = 'ambos';
     let dashSeccionesVisibles = {
@@ -1236,7 +1300,8 @@
       sectores: true,
       captadoras: true,
       plano: true,
-      tabla: true
+      tabla: true,
+      historial: true
     };
     let chartZonasInstance = null;
     let chartCaptadorasInstance = null;
@@ -1265,6 +1330,14 @@
       return new Date(chileMs).toISOString().slice(0, 10);
     }
 
+    function formatearFechaCortaES(yyyyMmDd) {
+      if (!yyyyMmDd || String(yyyyMmDd).length < 10) return yyyyMmDd || '';
+      const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+      const [y, m, d] = String(yyyyMmDd).slice(0, 10).split('-');
+      const mIdx = parseInt(m, 10) - 1;
+      return `${d} ${meses[mIdx] || m} ${y}`;
+    }
+
     function getAuthHeaders() {
       const token = localStorage.getItem('accessToken');
       if (!token) {
@@ -1275,6 +1348,56 @@
         "Content-Type": "application/json",
         "Authorization": `Bearer ${token}`
       };
+    }
+
+    let promesaRefreshEnCurso = null;
+
+    async function intentarRefrescarToken() {
+      if (promesaRefreshEnCurso) return promesaRefreshEnCurso;
+      const refreshToken = localStorage.getItem('refreshToken');
+      if (!refreshToken) return false;
+
+      promesaRefreshEnCurso = (async () => {
+        try {
+          const res = await fetch('/auth/refresh', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refresh_token: refreshToken })
+          });
+          if (!res.ok) return false;
+          const data = await res.json();
+          if (data?.status === 'success' && data?.access_token) {
+            localStorage.setItem('accessToken', data.access_token);
+            if (data.refresh_token) {
+              localStorage.setItem('refreshToken', data.refresh_token);
+            }
+            return true;
+          }
+          return false;
+        } catch (_) {
+          return false;
+        } finally {
+          promesaRefreshEnCurso = null;
+        }
+      })();
+
+      return promesaRefreshEnCurso;
+    }
+
+    async function fetchConAuth(url, options = {}) {
+      let headers = { ...(options.headers || {}), ...getAuthHeaders() };
+      let res = await fetch(url, { ...options, headers });
+      if (res.status === 401) {
+        const renovado = await intentarRefrescarToken();
+        if (renovado) {
+          headers = { ...(options.headers || {}), ...getAuthHeaders() };
+          res = await fetch(url, { ...options, headers });
+        } else {
+          cerrarSesion();
+          throw new Error('Tu sesión expiró. Por favor vuelve a iniciar sesión.');
+        }
+      }
+      return res;
     }
 
     function cambiarTab(tab) {
@@ -1300,8 +1423,40 @@
     }
 
     // ==========================================
-    // 1. CARGA Y GESTIÓN DE REGISTROS (DIARIO POR DEFECTO, HISTÓRICO SOLO ADMIN)
+    // 1. CARGA Y GESTIÓN DE REGISTROS (DIARIO, ÚLTIMA SANTA CENA, FECHA ESPECÍFICA E HISTÓRICO)
     // ==========================================
+    function actualizarBotonesModoRegistros(modoActivo) {
+      const btnDiario = document.getElementById('btnModoDiario');
+      const btnUltima = document.getElementById('btnModoUltimaSC');
+      const btnHist = document.getElementById('btnModoHistorico');
+      const selFecha = document.getElementById('filtroFechaEspecifica');
+      const labelTab = document.getElementById('labelTabRegistros');
+
+      const clsOn = 'px-2.5 py-1.5 rounded-lg text-xs font-extrabold bg-[#8b1e2d] text-white shadow-sm transition';
+      const clsOff = 'px-2.5 py-1.5 rounded-lg text-xs font-extrabold text-slate-600 hover:text-slate-900 transition';
+
+      if (btnDiario) btnDiario.className = (modoActivo === 'hoy') ? clsOn : clsOff;
+      if (btnUltima) btnUltima.className = (modoActivo === 'ultimo_evento') ? clsOn : clsOff;
+      if (btnHist) btnHist.className = (modoActivo === 'todos') ? clsOn : clsOff;
+
+      if (selFecha) {
+        if (modoActivo && modoActivo.length === 10 && modoActivo.includes('-')) {
+          selFecha.value = modoActivo;
+        } else if (modoActivo === 'ultimo_evento' && ultimaFechaEventoGlobal) {
+          selFecha.value = ultimaFechaEventoGlobal;
+        } else {
+          selFecha.value = '';
+        }
+      }
+
+      if (labelTab && isAdminGlobal) {
+        if (modoActivo === 'hoy') labelTab.textContent = 'Registros (Hoy)';
+        else if (modoActivo === 'ultimo_evento') labelTab.textContent = `Registros (${formatearFechaCortaES(ultimaFechaEventoGlobal || obtenerHoyChileFallback())})`;
+        else if (modoActivo === 'todos') labelTab.textContent = 'Registros (Histórico)';
+        else labelTab.textContent = `Registros (${formatearFechaCortaES(modoActivo)})`;
+      }
+    }
+
     function cambiarModoRegistros(modo) {
       const filtroInput = document.getElementById('filtroFecha');
       if (!isAdminGlobal) {
@@ -1309,39 +1464,49 @@
         filtrarRegistros();
         return;
       }
-      const nuevoModo = (modo === 'todos') ? 'todos' : 'hoy';
+      const nuevoModo = modo || 'hoy';
       if (filtroInput) filtroInput.value = nuevoModo;
+      actualizarBotonesModoRegistros(nuevoModo);
+      filtrarRegistros();
+    }
 
-      const btnDiario = document.getElementById('btnModoDiario');
-      const btnHist = document.getElementById('btnModoHistorico');
-      const labelTab = document.getElementById('labelTabRegistros');
-
-      if (btnDiario && btnHist) {
-        if (nuevoModo === 'hoy') {
-          btnDiario.className = 'px-3 py-1.5 rounded-lg text-xs font-extrabold bg-[#8b1e2d] text-white shadow-sm transition';
-          btnHist.className = 'px-3 py-1.5 rounded-lg text-xs font-extrabold text-slate-600 hover:text-slate-900 transition';
-          if (labelTab) labelTab.textContent = 'Registros (Diario Hoy)';
-        } else {
-          btnHist.className = 'px-3 py-1.5 rounded-lg text-xs font-extrabold bg-[#8b1e2d] text-white shadow-sm transition';
-          btnDiario.className = 'px-3 py-1.5 rounded-lg text-xs font-extrabold text-slate-600 hover:text-slate-900 transition';
-          if (labelTab) labelTab.textContent = 'Registros (Histórico Completo)';
-        }
+    function seleccionarFechaRegistros(fechaVal) {
+      if (!isAdminGlobal) return;
+      if (!fechaVal) {
+        cambiarModoRegistros('hoy');
+        return;
       }
+      const filtroInput = document.getElementById('filtroFecha');
+      if (filtroInput) filtroInput.value = fechaVal;
+      actualizarBotonesModoRegistros(fechaVal === ultimaFechaEventoGlobal ? 'ultimo_evento' : fechaVal);
       filtrarRegistros();
     }
 
     async function cargarRegistros() {
       try {
-        const res = await fetch('/registros/listar', { headers: getAuthHeaders() });
-        if (res.status === 401) {
-          cerrarSesion();
-          return;
-        }
+        const res = await fetchConAuth('/registros/listar');
         const data = await res.json();
         registrosGlobales = Array.isArray(data?.rows) ? data.rows : [];
         isAdminGlobal = !!data?.is_admin;
         if (data?.fecha_hoy) {
           fechaHoyServidor = data.fecha_hoy;
+        }
+        if (data?.ultima_fecha_evento) {
+          ultimaFechaEventoGlobal = data.ultima_fecha_evento;
+        }
+        if (Array.isArray(data?.fechas_disponibles)) {
+          fechasDisponiblesGlobal = data.fechas_disponibles;
+        }
+
+        // Poblar selector de fechas en Registros (solo Admin)
+        const selFechaReg = document.getElementById('filtroFechaEspecifica');
+        if (selFechaReg && isAdminGlobal) {
+          const valPrev = selFechaReg.value || '';
+          selFechaReg.innerHTML = `<option value="">📅 Elegir fecha...</option>` +
+            fechasDisponiblesGlobal.map(f => {
+              const fv = f.valor || '';
+              return `<option value="${fv}" ${fv === valPrev ? 'selected' : ''}>📅 ${formatearFechaCortaES(fv)} (${f.total || 0} reg.)</option>`;
+            }).join('');
         }
 
         // Mostrar u ocultar pestañas de dashboard y conteo según rol
@@ -1364,12 +1529,25 @@
 
         if (isAdminGlobal) {
           if (headerTitulo) headerTitulo.textContent = 'Santa Cena 2026 · Administración';
-          if (headerSub) headerSub.textContent = `Administrador: ${userName} · Diario Hoy y Opción Histórico`;
+          if (headerSub) headerSub.textContent = `Administrador: ${userName} · Hoy, Fechas Anteriores e Histórico`;
           if (wrapperFecha) wrapperFecha.classList.remove('hidden');
           if (badgeCaptadora) badgeCaptadora.classList.add('hidden');
-          // Al entrar a /admin, mostrar por defecto lo registrado en el mismo día (Diario)
+
+          // Configurar periodo inicial inteligente del Dashboard: si hoy hay datos -> diario; si hoy hay 0 -> ultimo_evento (último domingo con datos)
+          if (!dashAutoInicializado) {
+            dashAutoInicializado = true;
+            const hoyRef = fechaHoyServidor || obtenerHoyChileFallback();
+            const hayDatosHoy = registrosGlobales.some(r => ((r.fecha || r.created_at || '').slice(0, 10)) === hoyRef);
+            dashPeriodoActivo = hayDatosHoy ? 'diario' : 'ultimo_evento';
+          }
+
           const modoActual = filtroFechaInput?.value || 'hoy';
           cambiarModoRegistros(modoActual);
+
+          // Si se ingresó directamente por la URL /dashboard, abrir la pestaña Dashboard automáticamente
+          if (window.location.pathname.includes('/dashboard')) {
+            cambiarTab('dashboard');
+          }
         } else {
           if (headerTitulo) headerTitulo.textContent = 'Santa Cena 2026 · Mis Registros';
           if (headerSub) headerSub.textContent = `Hermana: ${userName} · Registros del Día`;
@@ -1398,12 +1576,14 @@
       const filtroFecha = (!isAdminGlobal) ? 'hoy' : (document.getElementById('filtroFecha')?.value || 'hoy');
       
       const hoyStr = obtenerHoyChileFallback();
+      const targetFechaExacta = (filtroFecha === 'ultimo_evento')
+        ? (ultimaFechaEventoGlobal || hoyStr)
+        : (filtroFecha === 'hoy' ? hoyStr : ((filtroFecha && filtroFecha.length === 10) ? filtroFecha : ''));
 
       const filtrados = registrosGlobales.filter(r => {
-        // Filtro Fecha: Por defecto solo lo registrado en el mismo día ('hoy'), salvo que Admin elija Histórico ('todos')
-        if (filtroFecha === 'hoy') {
-          const rFecha = (r.fecha || (r.created_at || '')).slice(0, 10);
-          if (rFecha !== hoyStr) return false;
+        const rFecha = (r.fecha || (r.created_at || '')).slice(0, 10);
+        if (filtroFecha !== 'todos' && targetFechaExacta) {
+          if (rFecha !== targetFechaExacta) return false;
         }
 
         // Filtro Culto
@@ -1434,7 +1614,7 @@
         return filaA - filaB;
       });
 
-      renderTablaRegistros(filtrados, filtroFecha, hoyStr);
+      renderTablaRegistros(filtrados, filtroFecha, hoyStr, targetFechaExacta);
     }
 
     function normalizarTelefonoChileno(val) {
@@ -1451,25 +1631,49 @@
       return digits;
     }
 
-    function renderTablaRegistros(rows, filtroFecha = 'hoy', hoyStr = '') {
+    function renderTablaRegistros(rows, filtroFecha = 'hoy', hoyStr = '', targetFechaExacta = '') {
       const tbody = document.getElementById('tablaRegistros');
       const countEl = document.getElementById('contadorRegistros');
       if (isAdminGlobal) {
         if (filtroFecha === 'hoy') {
-          countEl.innerHTML = `📅 <strong>Vista Diaria (${hoyStr})</strong>: Mostrando <strong>${rows.length}</strong> registros de hoy (Total histórico guardado: ${registrosGlobales.length}). Usa el botón <strong>"📜 Histórico"</strong> arriba para ver meses anteriores.`;
-        } else {
+          countEl.innerHTML = `📅 <strong>Vista Diaria Hoy (${formatearFechaCortaES(hoyStr)})</strong>: Mostrando <strong>${rows.length}</strong> registros de hoy (Total histórico guardado: <strong>${registrosGlobales.length}</strong>).`;
+        } else if (filtroFecha === 'todos') {
           countEl.innerHTML = `📜 <strong>Histórico Completo</strong>: Mostrando <strong>${rows.length}</strong> de ${registrosGlobales.length} hermanos (Ordenados: Sector 1 al 14).`;
+        } else {
+          countEl.innerHTML = `⛪ <strong>Fecha Seleccionada (${formatearFechaCortaES(targetFechaExacta)})</strong>: Mostrando <strong>${rows.length}</strong> hermanos registrados ese día.`;
         }
       } else {
         countEl.textContent = `📅 Vista Diaria (${hoyStr}): Mostrando tus ${rows.length} registros ingresados hoy`;
       }
 
       if (!rows.length) {
-        const msgVacio = (isAdminGlobal && filtroFecha === 'hoy' && registrosGlobales.length > 0)
-          ? `No hay registros ingresados hoy (${hoyStr}). Tienes ${registrosGlobales.length} registros guardados en el Histórico — haz clic en "📜 Histórico" arriba si deseas consultarlos.`
-          : `No se encontraron registros en esta vista.`;
+        if (isAdminGlobal && filtroFecha === 'hoy' && registrosGlobales.length > 0) {
+          const ultLbl = formatearFechaCortaES(ultimaFechaEventoGlobal);
+          tbody.innerHTML = `
+            <tr>
+              <td colspan="7" class="py-8 px-4 text-center">
+                <div class="max-w-xl mx-auto space-y-3">
+                  <p class="text-slate-600 font-bold text-sm">Hoy (${formatearFechaCortaES(hoyStr)}) no se han ingresado registros nuevos.</p>
+                  <p class="text-slate-500 text-xs">Tienes <strong>${registrosGlobales.length} registros guardados</strong> de servicios anteriores (último servicio: <strong>${ultLbl}</strong>).</p>
+                  <div class="flex flex-wrap items-center justify-center gap-2 pt-1">
+                    <button type="button" onclick="cambiarModoRegistros('ultimo_evento')" class="px-4 py-2 rounded-xl bg-[#8b1e2d] text-white text-xs font-extrabold hover:bg-[#701824] shadow-sm transition">
+                      ⛪ Ver Última Santa Cena (${ultLbl})
+                    </button>
+                    <button type="button" onclick="cambiarModoRegistros('todos')" class="px-4 py-2 rounded-xl bg-slate-800 text-white text-xs font-extrabold hover:bg-black shadow-sm transition">
+                      📜 Ver Histórico Completo
+                    </button>
+                    <button type="button" onclick="cambiarTab('dashboard')" class="px-4 py-2 rounded-xl bg-rose-50 text-[#8b1e2d] border border-rose-200 text-xs font-extrabold hover:bg-rose-100 transition">
+                      📊 Ir al Dashboard e Informes
+                    </button>
+                  </div>
+                </div>
+              </td>
+            </tr>
+          `;
+          return;
+        }
         tbody.innerHTML = `
-          <tr><td colspan="7" class="py-8 text-center text-slate-400 font-semibold italic">${msgVacio}</td></tr>
+          <tr><td colspan="7" class="py-8 text-center text-slate-400 font-semibold italic">No se encontraron registros en esta vista.</td></tr>
         `;
         return;
       }
@@ -1584,9 +1788,8 @@
       btn.textContent = 'Guardando...';
 
       try {
-        const res = await fetch('/registros/editar', {
+        const res = await fetchConAuth('/registros/editar', {
           method: 'POST',
-          headers: getAuthHeaders(),
           body: JSON.stringify({ id, nombre, telefono, fila, sector, culto })
         });
         const data = await res.json();
@@ -1622,9 +1825,8 @@
       if (!confirm('¿Seguro que deseas eliminar este registro?')) return;
       try {
         const endpoint = isAdminGlobal ? '/admin/borrar' : '/registros/borrar';
-        const res = await fetch(endpoint, {
+        const res = await fetchConAuth(endpoint, {
           method: 'POST',
-          headers: getAuthHeaders(),
           body: JSON.stringify({ id })
         });
         const data = await res.json();
@@ -1641,7 +1843,7 @@
       if (!isAdminGlobal) return;
       if (!confirm('⚠️ ¿RESET TOTAL? Esta acción borrará TODOS los registros de Santa Cena.')) return;
       try {
-        const res = await fetch('/admin/reset', { method: 'POST', headers: getAuthHeaders() });
+        const res = await fetchConAuth('/admin/reset', { method: 'POST' });
         const data = await res.json();
         if (!res.ok) throw new Error(data.message || 'Error al resetear');
         await cargarRegistros();
@@ -1650,44 +1852,98 @@
       }
     }
 
-    function exportarCSV() {
-      window.location.href = '/admin/export';
+    async function exportarCSV() {
+      if (!isAdminGlobal) {
+        alert('La exportación CSV está reservada a los administradores.');
+        return;
+      }
+      try {
+        const filtroFecha = document.getElementById('filtroFecha')?.value || 'todos';
+        const culto = document.getElementById('filtroCulto')?.value || 'todos';
+        const params = new URLSearchParams();
+        if (filtroFecha === 'ultimo_evento' && ultimaFechaEventoGlobal) {
+          params.set('fecha', ultimaFechaEventoGlobal);
+        } else if (filtroFecha && filtroFecha !== 'todos') {
+          params.set('fecha', filtroFecha);
+        }
+        if (culto && culto !== 'todos') {
+          params.set('culto', culto);
+        }
+        const res = await fetchConAuth(`/admin/export?${params.toString()}`);
+        if (!res.ok) throw new Error('No se pudo generar el archivo CSV.');
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        const sufijo = params.get('fecha') || 'historico';
+        a.href = url;
+        a.download = `santa_cena_${sufijo}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+      } catch (e) {
+        alert('Error al exportar CSV: ' + e.message);
+      }
     }
 
     // ==========================================
-    // 3. DASHBOARD E INFORMES (DIARIO, ÚLTIMO MES, HISTÓRICO + OPCIONES DE VISTA)
+    // 3. DASHBOARD E INFORMES (HOY, ÚLTIMA SANTA CENA, FECHA EXACTA, MES E HISTÓRICO)
     // ==========================================
-    function cambiarPeriodoDashboard(periodo) {
-      dashPeriodoActivo = periodo;
-      if (periodo === 'diario' || periodo === 'historico') {
-        dashMesEspecifico = '';
-        const sel = document.getElementById('dashMesSelect');
-        if (sel) sel.value = '';
-      }
-      ['diario', 'ultimo_mes', 'historico'].forEach(p => {
+    function pintarBotonesPeriodoDashboard(periodoActivo) {
+      ['diario', 'ultimo_evento', 'ultimo_mes', 'historico'].forEach(p => {
         const btn = document.getElementById(`btnDashPeriodo-${p}`);
         if (btn) {
-          const active = (p === periodo);
+          const active = (p === periodoActivo);
           btn.className = active
-            ? 'px-2 py-2 rounded-lg text-xs font-extrabold bg-[#8b1e2d] text-white shadow-sm transition text-center'
-            : 'px-2 py-2 rounded-lg text-xs font-extrabold text-slate-600 hover:text-slate-900 transition text-center';
+            ? 'px-1.5 py-2 rounded-lg text-[11px] font-extrabold bg-[#8b1e2d] text-white shadow-sm transition text-center leading-tight'
+            : 'px-1.5 py-2 rounded-lg text-[11px] font-extrabold text-slate-600 hover:text-slate-900 transition text-center leading-tight';
         }
       });
+    }
+
+    function cambiarPeriodoDashboard(periodo) {
+      dashPeriodoActivo = periodo;
+      dashFechaEspecifica = '';
+      if (periodo === 'diario' || periodo === 'ultimo_evento' || periodo === 'historico') {
+        dashMesEspecifico = '';
+        const selMes = document.getElementById('dashMesSelect');
+        if (selMes) selMes.value = '';
+      }
+      const selFecha = document.getElementById('dashFechaSelect');
+      if (selFecha) selFecha.value = '';
+      pintarBotonesPeriodoDashboard(periodo);
       cargarDashboard();
+    }
+
+    function cambiarFechaEspecificaDashboard(fechaVal) {
+      dashFechaEspecifica = fechaVal || '';
+      if (dashFechaEspecifica) {
+        dashMesEspecifico = '';
+        const selMes = document.getElementById('dashMesSelect');
+        if (selMes) selMes.value = '';
+        dashPeriodoActivo = (dashFechaEspecifica === ultimaFechaEventoGlobal) ? 'ultimo_evento' : 'fecha';
+        pintarBotonesPeriodoDashboard(dashPeriodoActivo === 'ultimo_evento' ? 'ultimo_evento' : '');
+      } else {
+        dashPeriodoActivo = 'ultimo_evento';
+        pintarBotonesPeriodoDashboard('ultimo_evento');
+      }
+      cargarDashboard();
+    }
+
+    function verFechaEnDashboard(fechaVal) {
+      if (!fechaVal) return;
+      cambiarFechaEspecificaDashboard(fechaVal);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
     function cambiarMesEspecificoDashboard(mesVal) {
       dashMesEspecifico = mesVal || '';
+      dashFechaEspecifica = '';
+      const selFecha = document.getElementById('dashFechaSelect');
+      if (selFecha) selFecha.value = '';
       if (dashMesEspecifico) {
         dashPeriodoActivo = 'ultimo_mes';
-        ['diario', 'ultimo_mes', 'historico'].forEach(p => {
-          const btn = document.getElementById(`btnDashPeriodo-${p}`);
-          if (btn) {
-            btn.className = (p === 'ultimo_mes')
-              ? 'px-2 py-2 rounded-lg text-xs font-extrabold bg-[#8b1e2d] text-white shadow-sm transition text-center'
-              : 'px-2 py-2 rounded-lg text-xs font-extrabold text-slate-600 hover:text-slate-900 transition text-center';
-          }
-        });
+        pintarBotonesPeriodoDashboard('ultimo_mes');
       }
       cargarDashboard();
     }
@@ -1702,7 +1958,6 @@
             : 'px-2 py-2 rounded-lg text-xs font-extrabold text-slate-600 hover:text-slate-900 transition';
         }
       });
-      // También sincronizar el filtro del plano esquemático
       if (culto === '11:00' || culto === '18:30' || culto === 'ambos') {
         setFiltroPlano(culto);
       }
@@ -1723,7 +1978,8 @@
         sectores: 'Gráfico Sectores',
         captadoras: 'Gráfico Captadoras',
         plano: 'Plano Esquemático',
-        tabla: 'Tabla Detalle'
+        tabla: 'Tabla Detalle',
+        historial: 'Fechas Históricas'
       };
       if (secEl) {
         secEl.classList.toggle('hidden', !dashSeccionesVisibles[key]);
@@ -1737,18 +1993,69 @@
       }
     }
 
+    function renderTablaHistorialFechasDash(historialFechas) {
+      const tbody = document.getElementById('tablaHistorialFechasDash');
+      if (!tbody) return;
+      if (!Array.isArray(historialFechas) || !historialFechas.length) {
+        tbody.innerHTML = `<tr><td colspan="7" class="py-6 text-center text-slate-400 italic">No hay fechas históricas registradas todavía.</td></tr>`;
+        return;
+      }
+      const fechaActivaActual = statsGlobales?.fecha_activa || dashFechaEspecifica || '';
+      tbody.innerHTML = historialFechas.map(item => {
+        const esActiva = (fechaActivaActual && item.valor === fechaActivaActual);
+        const esUltima = (item.valor === statsGlobales?.ultima_fecha_evento);
+        return `
+          <tr class="${esActiva ? 'bg-rose-50/80' : 'hover:bg-slate-50'} transition">
+            <td class="py-2.5 px-3">
+              <div class="font-extrabold text-slate-900 flex items-center gap-1.5">
+                <span>${item.etiqueta || item.valor}</span>
+                ${esUltima ? '<span class="px-1.5 py-0.5 rounded bg-[#8b1e2d] text-white text-[9px] uppercase font-black">Última SC</span>' : ''}
+              </div>
+              <div class="text-[10px] text-slate-400 font-semibold">${item.valor}</div>
+            </td>
+            <td class="py-2.5 px-3 text-center font-bold text-slate-800">${item.c11 || 0}</td>
+            <td class="py-2.5 px-3 text-center font-bold text-slate-800">${item.c18 || 0}</td>
+            <td class="py-2.5 px-3 text-center font-black text-[#8b1e2d]">${item.total || 0}</td>
+            <td class="py-2.5 px-3 text-center text-slate-600 font-semibold">${item.captadoras_count || 0}</td>
+            <td class="py-2.5 px-3 text-center text-slate-600 font-semibold">${item.sectores_count || 0}/14</td>
+            <td class="py-2.5 px-3 text-right no-print">
+              <button type="button" onclick="verFechaEnDashboard('${item.valor}')" class="px-3 py-1 rounded-lg text-xs font-extrabold ${esActiva ? 'bg-[#8b1e2d] text-white' : 'bg-rose-50 text-[#8b1e2d] border border-rose-200 hover:bg-rose-100'} transition">
+                ${esActiva ? '✓ Viendo en pantalla' : '🔍 Ver este día'}
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
     async function cargarDashboard() {
+      const errBanner = document.getElementById('dashErrorBanner');
+      const errTexto = document.getElementById('dashErrorTexto');
+      if (errBanner) errBanner.classList.add('hidden');
+
       try {
         const params = new URLSearchParams();
-        params.set('periodo', dashPeriodoActivo || 'ultimo_mes');
+        params.set('periodo', dashPeriodoActivo || 'ultimo_evento');
+        if (dashFechaEspecifica) {
+          params.set('fecha', dashFechaEspecifica);
+        }
         if (dashMesEspecifico) {
           params.set('mes', dashMesEspecifico);
         }
-        const res = await fetch(`/dashboard/stats?${params.toString()}`, { headers: getAuthHeaders() });
+
+        const res = await fetchConAuth(`/dashboard/stats?${params.toString()}`);
         const data = await res.json();
-        if (!res.ok || data.status !== 'success') throw new Error(data.message || 'Error al cargar stats');
+        if (!res.ok || data.status !== 'success') {
+          throw new Error(data.message || 'Error al cargar estadísticas del Dashboard');
+        }
 
         statsGlobales = data;
+        if (data.ultima_fecha_evento) {
+          ultimaFechaEventoGlobal = data.ultima_fecha_evento;
+        }
+
+        // Sincronizar estado visual de botones de periodo
+        pintarBotonesPeriodoDashboard(dashFechaEspecifica ? (dashFechaEspecifica === data.ultima_fecha_evento ? 'ultimo_evento' : '') : (data.periodo_activo || dashPeriodoActivo));
 
         // Actualizar insignia de periodo y contadores
         const badgeEl = document.getElementById('dashPeriodoBadge');
@@ -1757,11 +2064,26 @@
         }
         if (data.conteos_globales) {
           const cDiario = document.getElementById('badgeCountDiario');
+          const cUltEv = document.getElementById('badgeCountUltimoEvento');
           const cUltMes = document.getElementById('badgeCountUltimoMes');
           const cHist = document.getElementById('badgeCountHistorico');
-          if (cDiario) cDiario.textContent = `(${data.conteos_globales.diario || 0} reg.)`;
-          if (cUltMes) cUltMes.textContent = `(${data.conteos_globales.ultimo_mes || 0} reg.)`;
-          if (cHist) cHist.textContent = `(${data.conteos_globales.historico || 0} reg.)`;
+          if (cDiario) cDiario.textContent = `(${data.conteos_globales.diario || 0})`;
+          if (cUltEv) cUltEv.textContent = `(${data.conteos_globales.ultimo_evento || 0})`;
+          if (cUltMes) cUltMes.textContent = `(${data.conteos_globales.ultimo_mes || 0})`;
+          if (cHist) cHist.textContent = `(${data.conteos_globales.historico || 0})`;
+        }
+
+        // Poblar selector de Fechas de Santa Cena disponibles ("del otro día")
+        const fechaSelect = document.getElementById('dashFechaSelect');
+        if (fechaSelect && Array.isArray(data.fechas_disponibles)) {
+          const selVal = dashFechaEspecifica || ((data.periodo_activo === 'ultimo_evento' && data.fecha_activa) ? data.fecha_activa : '');
+          fechaSelect.innerHTML = `<option value="">Según periodo rápido seleccionado</option>` +
+            data.fechas_disponibles.map(f => {
+              const fv = f.valor || '';
+              const lbl = f.etiqueta || fv;
+              const tot = f.total || 0;
+              return `<option value="${fv}" ${fv === selVal ? 'selected' : ''}>⛪ ${lbl} (${tot} reg.)</option>`;
+            }).join('');
         }
 
         // Poblar selector de meses disponibles
@@ -1778,34 +2100,39 @@
               const val = typeof ym === 'string' ? ym : (ym?.valor || '');
               const [y, m] = String(val).split('-');
               const label = typeof ym === 'object' && ym?.etiqueta
-                ? `${ym.etiqueta} (${val})`
-                : `${nombresMeses[m] || m} ${y || ''} (${val})`;
+                ? `${ym.etiqueta}`
+                : `${nombresMeses[m] || m} ${y || ''}`;
               return `<option value="${val}" ${val === currentVal ? 'selected' : ''}>📆 Solo ${label}</option>`;
             }).join('');
         }
 
         // Renderizar KPIs
-        const r = data.resumen;
-        document.getElementById('kpi-cap-11').textContent = r.total_11;
-        document.getElementById('kpi-cap-11-sub').textContent = `${r.count_captadoras_11} captadoras · ${r.count_sectores_11 || r.count_zonas_11} sectores`;
+        const r = data.resumen || {};
+        document.getElementById('kpi-cap-11').textContent = r.total_11 || 0;
+        document.getElementById('kpi-cap-11-sub').textContent = `${r.count_captadoras_11 || 0} captadoras · ${r.count_sectores_11 || r.count_zonas_11 || 0} sectores`;
 
-        document.getElementById('kpi-cap-18').textContent = r.total_18;
-        document.getElementById('kpi-cap-18-sub').textContent = `${r.count_captadoras_18} captadoras · ${r.count_sectores_18 || r.count_zonas_18} sectores`;
+        document.getElementById('kpi-cap-18').textContent = r.total_18 || 0;
+        document.getElementById('kpi-cap-18-sub').textContent = `${r.count_captadoras_18 || 0} captadoras · ${r.count_sectores_18 || r.count_zonas_18 || 0} sectores`;
 
-        document.getElementById('kpi-cen-11').textContent = `${r.pct_centrales_11}%`;
-        document.getElementById('kpi-cen-18').textContent = `${r.pct_centrales_18}%`;
+        document.getElementById('kpi-cen-11').textContent = `${r.pct_centrales_11 || 0}%`;
+        document.getElementById('kpi-cen-18').textContent = `${r.pct_centrales_18 || 0}%`;
 
         // Renderizar Gráficos
         const sectoresData = data.sectores || data.zonas || [];
         renderChartZonas(sectoresData);
-        renderChartCaptadoras(data.captadoras);
+        renderChartCaptadoras(data.captadoras || []);
 
-        // Renderizar Plano y Tabla Detalle
+        // Renderizar Plano, Tabla Detalle y Tabla de Fechas Históricas
         renderPlanoEsquematico();
         renderTablaDetalleZonas(sectoresData);
+        renderTablaHistorialFechasDash(data.historial_fechas || []);
 
       } catch (e) {
         console.error(e);
+        if (errBanner && errTexto) {
+          errTexto.textContent = `No se pudieron cargar los datos del Dashboard: ${e.message}`;
+          errBanner.classList.remove('hidden');
+        }
       }
     }
 
@@ -2676,7 +3003,7 @@
       } catch (_) {}
 
       try {
-        const res = await fetch('/admin/metricas_culto', { headers: getAuthHeaders() });
+        const res = await fetchConAuth('/admin/metricas_culto');
         const data = await res.json();
         const m = data?.metricas || {};
 
@@ -2695,7 +3022,20 @@
           excelState = getDefaultExcelState();
         }
 
-        cargarMesEnFormulario(excelState.mesActivo || 'Octubre');
+        // Elegir el mes activo guardado, o si está vacío elegir automáticamente el último mes con datos reales
+        let mesInicial = excelState.mesActivo || 'Octubre';
+        const mesesConCifras = (excelState.historicoAnual || []).filter(
+          x => ((Number(x.sc1) || 0) + (Number(x.sc2) || 0) + (Number(x.asist1) || 0) + (Number(x.asist2) || 0)) > 0
+        );
+        if (mesesConCifras.length > 0) {
+          const ultimoConDatos = mesesConCifras[mesesConCifras.length - 1].mes;
+          const actualObj = (excelState.historicoAnual || []).find(x => x.mes === mesInicial);
+          const actualTiene = actualObj && (((Number(actualObj.sc1) || 0) + (Number(actualObj.sc2) || 0)) > 0);
+          if (!actualTiene) {
+            mesInicial = ultimoConDatos;
+          }
+        }
+        cargarMesEnFormulario(mesInicial);
       } catch (e) {
         console.error(e);
         if (localBackup && localBackup.historicoAnual) {
@@ -2748,9 +3088,8 @@
       if (btn2) { btn2.disabled = true; btn2.innerHTML = '<span>⏳</span> <span>Guardando...</span>'; }
 
       try {
-        const res = await fetch('/admin/metricas_culto', {
+        const res = await fetchConAuth('/admin/metricas_culto', {
           method: 'POST',
-          headers: getAuthHeaders(),
           body: JSON.stringify(payload)
         });
         const data = await res.json();
@@ -2769,15 +3108,381 @@
     }
 
     // =========================================================================
-    // 5. GENERADOR DE INFORME EJECUTIVO PDF ESTRUCTURADO Y DETALLADO (MULTI-PÁGINA)
+    // 5A. GENERADOR DE INFORME PDF DEL DASHBOARD DE CAPTACIÓN (POR DÍA / MES / HISTÓRICO)
+    // =========================================================================
+    async function descargarInformeDashboardPDF() {
+      const btn = document.getElementById('btnDescargarDashPDF');
+      const txtOrig = btn ? btn.innerHTML : '';
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span>⏳</span> <span>Generando PDF...</span>';
+      }
+
+      try {
+        if (!statsGlobales) {
+          await cargarDashboard();
+        }
+        if (!statsGlobales) {
+          alert('No se pudieron cargar los datos del Dashboard para generar el informe.');
+          return;
+        }
+
+        const jspdfLib = window.jspdf;
+        if (!jspdfLib || !jspdfLib.jsPDF) {
+          alert('Cargando librería de informes PDF. Intenta de nuevo en 2 segundos.');
+          return;
+        }
+
+        const { jsPDF } = jspdfLib;
+        const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const pageHeight = doc.internal.pageSize.getHeight();
+        const margin = 14;
+
+        const r = statsGlobales.resumen || {};
+        const etiquetaPeriodo = statsGlobales.etiqueta_periodo || 'Reporte de Captación';
+        const sectores = statsGlobales.sectores || statsGlobales.zonas || [];
+        const captadoras = statsGlobales.captadoras || [];
+        const mesones = statsGlobales.mesones || [];
+        const historialFechas = statsGlobales.historial_fechas || [];
+        const nomina = statsGlobales.nomina || [];
+        const fechaEmision = new Date().toLocaleDateString('es-CL', { day: '2-digit', month: 'long', year: 'numeric' });
+
+        const dibujarHeaderDash = (subtitulo) => {
+          doc.setFillColor(139, 30, 45);
+          doc.rect(0, 0, pageWidth, 24, 'F');
+          doc.setTextColor(255, 255, 255);
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(12.5);
+          doc.text('INFORME EJECUTIVO DE CAPTACIÓN · SERVICIO DE SANTA CENA', margin, 9.5);
+          doc.setFontSize(8.5);
+          doc.setFont('helvetica', 'normal');
+          doc.text(`${subtitulo}  |  Periodo: ${etiquetaPeriodo}  |  Emisión: ${fechaEmision}`, margin, 17);
+        };
+
+        // PÁGINA 1: KPIs, MESONES Y DETALLE DE LOS 14 SECTORES
+        dibujarHeaderDash('Pág. 1: Resumen General, Mesones y Ocupación por Sector');
+        let y = 30;
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10);
+        doc.setTextColor(15, 23, 42);
+        doc.text(`1. RESUMEN EJECUTIVO DE CAPTACIÓN (${etiquetaPeriodo.toUpperCase()})`, margin, y);
+        y += 2.5;
+
+        doc.autoTable({
+          startY: y,
+          margin: { left: margin, right: margin },
+          head: [['Indicador de Servicio', '1ª Reunión (11:00 hrs)', '2ª Reunión (18:30 hrs)', 'Total Consolidado']],
+          body: [
+            ['Hermanos Inscritos para Servir', fmtNum(r.total_11 || 0), fmtNum(r.total_18 || 0), fmtNum(r.total_general || 0)],
+            ['Hermanas Captadoras Activas', `${r.count_captadoras_11 || 0} captadoras`, `${r.count_captadoras_18 || 0} captadoras`, `${captadoras.length} en el periodo`],
+            ['Cobertura de Sectores (de 14)', `${r.count_sectores_11 || 0} / 14 sectores`, `${r.count_sectores_18 || 0} / 14 sectores`, 'Templo S1 – S14'],
+            ['Ocupación Sectores Centrales (5, 7 y 9)', `${r.pct_centrales_11 || 0}% del culto`, `${r.pct_centrales_18 || 0}% del culto`, 'Prioridad Central']
+          ],
+          theme: 'grid',
+          styles: { fontSize: 8, cellPadding: 2, textColor: [30, 41, 59] },
+          headStyles: { fillColor: [139, 30, 45], textColor: 255, fontStyle: 'bold' },
+          columnStyles: {
+            0: { fontStyle: 'bold', cellWidth: 68 },
+            3: { fontStyle: 'bold', textColor: [139, 30, 45] }
+          }
+        });
+
+        y = doc.lastAutoTable.finalY + 5.5;
+
+        if (mesones.length > 0) {
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(10);
+          doc.setTextColor(15, 23, 42);
+          doc.text('2. DISTRIBUCIÓN LOGÍSTICA POR MESÓN DE ENTREGA', margin, y);
+          y += 2.5;
+
+          const bodyMesones = mesones.map(m => [
+            m.meson,
+            fmtNum(m.c11 || 0),
+            fmtNum(m.c18 || 0),
+            fmtNum(m.total || 0)
+          ]);
+
+          doc.autoTable({
+            startY: y,
+            margin: { left: margin, right: margin },
+            head: [['Mesón Asignado', '11:00 hrs', '18:30 hrs', 'Total Asignados']],
+            body: bodyMesones,
+            theme: 'striped',
+            styles: { fontSize: 8, cellPadding: 1.8 },
+            headStyles: { fillColor: [30, 41, 59], textColor: 255, fontStyle: 'bold' },
+            columnStyles: {
+              0: { fontStyle: 'bold' },
+              1: { halign: 'center' },
+              2: { halign: 'center' },
+              3: { halign: 'right', fontStyle: 'bold', textColor: [139, 30, 45] }
+            }
+          });
+          y = doc.lastAutoTable.finalY + 5.5;
+        }
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10);
+        doc.setTextColor(15, 23, 42);
+        doc.text('3. DETALLE COMPLETO POR SECTOR Y COBERTURA (SECTORES 1 AL 14)', margin, y);
+        y += 2.5;
+
+        const bodySecDash = sectores.map(s => [
+          `Sector ${s.sector || s.zona}`,
+          s.meson || '',
+          s.filas || '',
+          (s.captadoras_11 && s.captadoras_11.length) ? s.captadoras_11.join(', ') : '—',
+          fmtNum(s.c11 || 0),
+          (s.captadoras_18 && s.captadoras_18.length) ? s.captadoras_18.join(', ') : '—',
+          fmtNum(s.c18 || 0),
+          fmtNum(s.total || 0)
+        ]);
+        bodySecDash.push([
+          'TOTAL GENERAL',
+          'Todos los Mesones',
+          'Filas 1-215',
+          `${r.count_captadoras_11 || 0} captadoras`,
+          fmtNum(r.total_11 || 0),
+          `${r.count_captadoras_18 || 0} captadoras`,
+          fmtNum(r.total_18 || 0),
+          fmtNum(r.total_general || 0)
+        ]);
+
+        doc.autoTable({
+          startY: y,
+          margin: { left: margin, right: margin },
+          head: [['Sector', 'Mesón', 'Filas', 'Captadoras 11:00', '11:00', 'Captadoras 18:30', '18:30', 'Total']],
+          body: bodySecDash,
+          theme: 'grid',
+          styles: { fontSize: 7.4, cellPadding: 1.6 },
+          headStyles: { fillColor: [139, 30, 45], textColor: 255, fontStyle: 'bold' },
+          columnStyles: {
+            0: { fontStyle: 'bold', cellWidth: 20 },
+            1: { cellWidth: 31 },
+            2: { cellWidth: 18 },
+            4: { halign: 'center', fontStyle: 'bold' },
+            6: { halign: 'center', fontStyle: 'bold' },
+            7: { halign: 'right', fontStyle: 'bold', textColor: [139, 30, 45] }
+          }
+        });
+
+        // PÁGINA 2: GRÁFICOS DEL DASHBOARD + RANKING CAPTADORAS + FECHAS HISTÓRICAS
+        doc.addPage();
+        dibujarHeaderDash('Pág. 2: Gráficos de Captación, Rendimiento de Captadoras e Historial');
+        y = 30;
+
+        // Asegurar que los contenedores de gráficos del Dashboard sean medibles aunque estén ocultos por filtro visual
+        const secSectoresEl = document.getElementById('dashSection-sectores');
+        const secCapEl = document.getElementById('dashSection-captadoras');
+        const wasSecHidden = secSectoresEl && secSectoresEl.classList.contains('hidden');
+        const wasCapHidden = secCapEl && secCapEl.classList.contains('hidden');
+        if (wasSecHidden) secSectoresEl.classList.remove('hidden');
+        if (wasCapHidden) secCapEl.classList.remove('hidden');
+        renderChartZonas(sectores);
+        renderChartCaptadoras(captadoras);
+        await new Promise(rDelay => setTimeout(rDelay, 60));
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10);
+        doc.setTextColor(15, 23, 42);
+        doc.text('4. VISUALIZACIÓN GRÁFICA POR SECTOR Y POR CAPTADORA', margin, y);
+        y += 3.5;
+
+        const boxW = (pageWidth - margin * 2 - 6) / 2;
+        const boxH = 56;
+        const adjuntarCanvas = (canvasId, titulo, xP, yP, w, h) => {
+          const cv = document.getElementById(canvasId);
+          if (!cv) return;
+          try {
+            doc.setDrawColor(226, 232, 240);
+            doc.setFillColor(255, 255, 255);
+            doc.roundedRect(xP, yP, w, h, 2, 2, 'FD');
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(8);
+            doc.setTextColor(30, 41, 59);
+            doc.text(titulo, xP + 3, yP + 5);
+            const img = cv.toDataURL('image/png', 1.0);
+            doc.addImage(img, 'PNG', xP + 2, yP + 7, w - 4, h - 9);
+          } catch (_) {}
+        };
+
+        adjuntarCanvas('chartZonas', 'Captación por Sector (S1 - S14)', margin, y, boxW, boxH);
+        adjuntarCanvas('chartCaptadoras', 'Total por Hermana Captadora', margin + boxW + 6, y, boxW, boxH);
+
+        if (wasSecHidden) secSectoresEl.classList.add('hidden');
+        if (wasCapHidden) secCapEl.classList.add('hidden');
+
+        y += boxH + 7;
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10);
+        doc.setTextColor(15, 23, 42);
+        doc.text('5. RENDIMIENTO DETALLADO POR HERMANA CAPTADORA', margin, y);
+        y += 2.5;
+
+        const totGenSafe = (r.total_general || 0) > 0 ? r.total_general : 1;
+        const bodyCap = captadoras.length
+          ? captadoras.map((c, idx) => [
+              `${idx + 1}`,
+              c.nombre || 'Captadora',
+              fmtNum(c.c11 || 0),
+              fmtNum(c.c18 || 0),
+              fmtNum(c.total || 0),
+              `${fmtDec(((c.total || 0) / totGenSafe) * 100, 1)}%`
+            ])
+          : [['—', 'Sin registros en este periodo', '0', '0', '0', '0%']];
+
+        doc.autoTable({
+          startY: y,
+          margin: { left: margin, right: margin },
+          head: [['#', 'Hermana Captadora', '11:00 hrs', '18:30 hrs', 'Total Inscritos', '% Aporte']],
+          body: bodyCap,
+          theme: 'striped',
+          styles: { fontSize: 7.8, cellPadding: 1.7 },
+          headStyles: { fillColor: [30, 41, 59], textColor: 255, fontStyle: 'bold' },
+          columnStyles: {
+            0: { cellWidth: 10, halign: 'center' },
+            1: { fontStyle: 'bold' },
+            2: { halign: 'center' },
+            3: { halign: 'center' },
+            4: { halign: 'right', fontStyle: 'bold', textColor: [139, 30, 45] },
+            5: { halign: 'right' }
+          }
+        });
+
+        y = doc.lastAutoTable.finalY + 6;
+
+        if (historialFechas.length > 0 && y < pageHeight - 40) {
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(10);
+          doc.setTextColor(15, 23, 42);
+          doc.text('6. CONSOLIDADO HISTÓRICO POR FECHA DE SANTA CENA', margin, y);
+          y += 2.5;
+
+          doc.autoTable({
+            startY: y,
+            margin: { left: margin, right: margin },
+            head: [['Fecha del Servicio', '11:00 hrs', '18:30 hrs', 'Total Hermanos', 'Captadoras', 'Sectores']],
+            body: historialFechas.map(f => [
+              `${f.etiqueta || f.valor} (${f.valor})`,
+              fmtNum(f.c11 || 0),
+              fmtNum(f.c18 || 0),
+              fmtNum(f.total || 0),
+              `${f.captadoras_count || 0}`,
+              `${f.sectores_count || 0}/14`
+            ]),
+            theme: 'grid',
+            styles: { fontSize: 7.6, cellPadding: 1.6 },
+            headStyles: { fillColor: [139, 30, 45], textColor: 255, fontStyle: 'bold' },
+            columnStyles: {
+              0: { fontStyle: 'bold' },
+              1: { halign: 'center' },
+              2: { halign: 'center' },
+              3: { halign: 'right', fontStyle: 'bold', textColor: [139, 30, 45] },
+              4: { halign: 'center' },
+              5: { halign: 'center' }
+            }
+          });
+        }
+
+        // ANEXO: NÓMINA COMPLETA DE HERMANOS ASIGNADOS EN EL PERIODO SELECCIONADO
+        if (nomina.length > 0) {
+          doc.addPage();
+          dibujarHeaderDash('Anexo: Nómina Oficial de Hermanos Inscritos por Sector y Fila');
+          let yNom = 30;
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(10);
+          doc.setTextColor(15, 23, 42);
+          doc.text(`NÓMINA DE ASIGNACIÓN (${nomina.length} REGISTROS · ORDENADO POR SECTOR Y FILA)`, margin, yNom);
+          yNom += 2.5;
+
+          doc.autoTable({
+            startY: yNom,
+            margin: { left: margin, right: margin },
+            head: [['Sector', 'Mesón', 'Fila', 'Culto', 'Hermano(a)', 'Teléfono', 'Captadora', 'Fecha']],
+            body: nomina.map(n => [
+              `S${n.sector}`,
+              n.meson || '',
+              `#${n.fila}`,
+              n.culto || '11:00',
+              n.nombre || '—',
+              n.telefono || '—',
+              n.captadora || '—',
+              n.fecha || ''
+            ]),
+            theme: 'striped',
+            styles: { fontSize: 7, cellPadding: 1.4 },
+            headStyles: { fillColor: [139, 30, 45], textColor: 255, fontStyle: 'bold' },
+            columnStyles: {
+              0: { fontStyle: 'bold', cellWidth: 13 },
+              1: { cellWidth: 28 },
+              2: { fontStyle: 'bold', halign: 'center', cellWidth: 13 },
+              3: { halign: 'center', cellWidth: 14 },
+              4: { fontStyle: 'bold' }
+            }
+          });
+        }
+
+        const totalPages = doc.internal.getNumberOfPages();
+        for (let p = 1; p <= totalPages; p++) {
+          doc.setPage(p);
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(7.5);
+          doc.setTextColor(148, 163, 184);
+          doc.text(
+            `Sistema Santa Cena 2026 · Informe de Captación (${etiquetaPeriodo}) · Página ${p} de ${totalPages}`,
+            pageWidth / 2,
+            pageHeight - 6,
+            { align: 'center' }
+          );
+        }
+
+        const safeFileTag = (statsGlobales.fecha_activa || statsGlobales.mes_activo || 'Historico').replace(/[^a-zA-Z0-9_-]/g, '_');
+        doc.save(`Informe_Captacion_Santa_Cena_${safeFileTag}.pdf`);
+      } catch (err) {
+        console.error(err);
+        alert('Error al generar el PDF de Captación: ' + err.message);
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = txtOrig;
+        }
+      }
+    }
+
+    // =========================================================================
+    // 5B. GENERADOR DE INFORME EJECUTIVO PDF DE ESTADÍSTICAS Y CONTEO (MULTI-PÁGINA)
     // =========================================================================
     async function descargarInformePDFEstructurado() {
+      // Asegurar que siempre cargue los datos reales guardados en Supabase antes de generar el PDF
+      if (!excelState) {
+        await cargarMetricasCulto();
+      }
       if (!excelState) {
         excelState = getDefaultExcelState();
         cargarMesEnFormulario('Octubre');
       }
+
+      // Si la pestaña #tab-metricas está oculta (por ej., el usuario descargó desde el Dashboard),
+      // habilitar su medición fuera de pantalla por un instante para que Chart.js dibuje los 4 gráficos en alta resolución
+      const tabMetricasEl = document.getElementById('tab-metricas');
+      const estabaOculta = tabMetricasEl && tabMetricasEl.classList.contains('hidden');
+      if (estabaOculta) {
+        tabMetricasEl.classList.remove('hidden');
+        tabMetricasEl.style.position = 'fixed';
+        tabMetricasEl.style.left = '-9999px';
+        tabMetricasEl.style.top = '0';
+        tabMetricasEl.style.width = '1120px';
+        tabMetricasEl.style.visibility = 'hidden';
+      }
+
       recalcularTodoExcel(false);
       actualizarGraficosExcel();
+      if (estabaOculta) {
+        await new Promise(rDelay => setTimeout(rDelay, 80));
+      }
 
       const jspdfLib = window.jspdf;
       if (!jspdfLib || !jspdfLib.jsPDF) {
@@ -3113,6 +3818,15 @@
       addChartToDoc('chartExcelComparativa', 'Comparativa Cenas Servidas vs Asistencia', margin + boxW + 6, y, boxW, boxH);
       addChartToDoc('chartExcelSectores', `Distribución por Sector (${mes} 2026)`, margin, y + boxH + 5, boxW, boxH);
       addChartToDoc('chartExcelNoCenaron', 'Indicador Mensual "No Cenaron"', margin + boxW + 6, y + boxH + 5, boxW, boxH);
+
+      if (estabaOculta && tabMetricasEl) {
+        tabMetricasEl.classList.add('hidden');
+        tabMetricasEl.style.position = '';
+        tabMetricasEl.style.left = '';
+        tabMetricasEl.style.top = '';
+        tabMetricasEl.style.width = '';
+        tabMetricasEl.style.visibility = '';
+      }
 
       // Pie de página en todas las páginas
       const totalPages = doc.internal.getNumberOfPages();
