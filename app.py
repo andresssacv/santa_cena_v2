@@ -92,6 +92,57 @@ def ejecutar_con_respaldo_auth(fn, user_token=None):
     raise last_err
 
 
+def ejecutar_lectura_completa(fn, user_token=None, id_key="id"):
+    """
+    Ejecuta una consulta SELECT probando todos los contextos de credenciales disponibles
+    (SUPABASE_KEY, token del usuario actual y caché admin) y unifica las filas obtenidas.
+    Evita que políticas RLS parciales oculten registros de días anteriores o de otras captadoras
+    cuando un administrador consulta el Dashboard o el Histórico días después del evento.
+    """
+    tokens_a_probar = []
+    if SUPABASE_KEY:
+        tokens_a_probar.append(SUPABASE_KEY)
+    if user_token and user_token not in tokens_a_probar:
+        tokens_a_probar.append(user_token)
+    admin_tok = LAST_ADMIN_AUTH.get("token")
+    if admin_tok and admin_tok not in tokens_a_probar:
+        tokens_a_probar.append(admin_tok)
+
+    if not tokens_a_probar:
+        res = fn()
+        return list(res.data or [])
+
+    filas_por_id = {}
+    filas_sin_id = []
+    alguno_exitoso = False
+    last_err = None
+
+    for tok in tokens_a_probar:
+        try:
+            set_postgrest_token(tok)
+            res = fn()
+            alguno_exitoso = True
+            for row in (res.data or []):
+                rid = row.get(id_key) if isinstance(row, dict) else None
+                if rid is not None:
+                    s_rid = str(rid)
+                    if s_rid not in filas_por_id:
+                        filas_por_id[s_rid] = row
+                else:
+                    filas_sin_id.append(row)
+        except Exception as e:
+            last_err = e
+            continue
+
+    if user_token:
+        set_postgrest_token(user_token)
+
+    if not alguno_exitoso and last_err is not None:
+        raise last_err
+
+    return list(filas_por_id.values()) + filas_sin_id
+
+
 def get_config_error_message():
     if supabase_init_error:
         return (
@@ -765,14 +816,21 @@ def obtener_todos_los_registros(user_token=None):
     1. 'historico_santa_cena' (nueva tabla principal ilimitada).
     2. 'registros_santa_cena' (tabla histórica previa + enriquecimientos __SYS_ENR_V2__).
     3. Respaldo ilimitado '__SYS_REG_V2__' en 'contactos'.
+    Utiliza lectura multicredencial y fallback sin ORDER BY si alguna tabla antigua no tiene 'created_at'.
     """
     hist_rows = []
     try:
-        res_h = ejecutar_con_respaldo_auth(
-            lambda: supabase.table("historico_santa_cena").select("*").order("created_at", desc=True).execute(),
-            user_token
-        )
-        for r in (res_h.data or []):
+        try:
+            raw_hist = ejecutar_lectura_completa(
+                lambda: supabase.table("historico_santa_cena").select("*").order("created_at", desc=True).limit(5000).execute(),
+                user_token
+            )
+        except Exception:
+            raw_hist = ejecutar_lectura_completa(
+                lambda: supabase.table("historico_santa_cena").select("*").limit(5000).execute(),
+                user_token
+            )
+        for r in (raw_hist or []):
             item = dict(r)
             raw_id = item.get("id")
             item["id"] = f"hist:{raw_id}"
@@ -782,11 +840,17 @@ def obtener_todos_los_registros(user_token=None):
 
     reg_rows = []
     try:
-        res_r = ejecutar_con_respaldo_auth(
-            lambda: supabase.table("registros_santa_cena").select("*").order("created_at", desc=True).execute(),
-            user_token
-        )
-        for r in (res_r.data or []):
+        try:
+            raw_reg = ejecutar_lectura_completa(
+                lambda: supabase.table("registros_santa_cena").select("*").order("created_at", desc=True).limit(5000).execute(),
+                user_token
+            )
+        except Exception:
+            raw_reg = ejecutar_lectura_completa(
+                lambda: supabase.table("registros_santa_cena").select("*").limit(5000).execute(),
+                user_token
+            )
+        for r in (raw_reg or []):
             item = dict(r)
             if "id" in item and item["id"] is not None:
                 item["id"] = str(item["id"])
@@ -798,11 +862,11 @@ def obtener_todos_los_registros(user_token=None):
     enr_map = {}
     sys_rows = []
     try:
-        res_enr = ejecutar_con_respaldo_auth(
-            lambda: supabase.table("contactos").select("id, nombre").ilike("nombre", "__SYS_ENR_V2__:%").execute(),
+        raw_enr = ejecutar_lectura_completa(
+            lambda: supabase.table("contactos").select("id, nombre").ilike("nombre", "__SYS_ENR_V2__:%").limit(5000).execute(),
             user_token
         )
-        for c in (res_enr.data or []):
+        for c in (raw_enr or []):
             raw_name = str(c.get("nombre") or "")
             # Formato: __SYS_ENR_V2__:<raw_id>:<json>
             parts = raw_name.split(":", 2)
@@ -825,11 +889,11 @@ def obtener_todos_los_registros(user_token=None):
                         r[campo] = extra[campo]
 
     try:
-        res_sys = ejecutar_con_respaldo_auth(
-            lambda: supabase.table("contactos").select("id, nombre").ilike("nombre", "__SYS_REG_V2__:%").order("id", desc=True).execute(),
+        raw_sys = ejecutar_lectura_completa(
+            lambda: supabase.table("contactos").select("id, nombre").ilike("nombre", "__SYS_REG_V2__:%").order("id", desc=True).limit(5000).execute(),
             user_token
         )
-        for c in (res_sys.data or []):
+        for c in (raw_sys or []):
             raw_name = str(c.get("nombre") or "")
             if raw_name.startswith("__SYS_REG_V2__:"):
                 raw_json = raw_name[len("__SYS_REG_V2__:"):]
@@ -1232,6 +1296,42 @@ def auth_login():
         return jsonify({"status": "error", "message": "Credenciales inválidas"}), 401
 
 
+@app.route('/auth/refresh', methods=['POST'])
+def auth_refresh():
+    """Renueva silenciosamente el access_token usando el refresh_token guardado en el navegador."""
+    supabase_error = require_supabase()
+    if supabase_error:
+        return supabase_error
+
+    data = request.get_json(silent=True) or {}
+    refresh_token = (data.get('refresh_token') or '').strip()
+    if not refresh_token:
+        return jsonify({"status": "error", "message": "Refresh token requerido"}), 400
+
+    try:
+        refresh_client = build_supabase_client(SUPABASE_URL, SUPABASE_KEY)
+        auth_resp = refresh_client.auth.refresh_session(refresh_token)
+        session = auth_resp.session
+        user = auth_resp.user
+        if not session or not user:
+            return jsonify({"status": "error", "message": "Sesión expirada"}), 401
+
+        TOKEN_CACHE[session.access_token] = {"user": user, "exp": time.time() + TOKEN_CACHE_TTL_SECONDS}
+        if require_admin(user):
+            LAST_ADMIN_AUTH["token"] = session.access_token
+            LAST_ADMIN_AUTH["user_id"] = user.id
+            LAST_ADMIN_AUTH["email"] = user.email
+
+        return jsonify({
+            "status": "success",
+            "access_token": session.access_token,
+            "refresh_token": session.refresh_token,
+            "user": {"id": user.id, "email": user.email}
+        })
+    except Exception:
+        return jsonify({"status": "error", "message": "Sesión expirada, vuelve a iniciar sesión"}), 401
+
+
 
 @app.route('/contactos/sugerencias')
 def contactos_sugerencias():
@@ -1524,10 +1624,24 @@ def registros_listar():
             )
         r["mesa_label"] = obtener_mesa_label(r.get("sector"))
 
+    fechas_admin = []
+    ultima_fecha_evento = hoy
+    if is_admin and rows:
+        conteo_f = {}
+        for r in rows:
+            f_val = r.get("fecha") or hoy
+            conteo_f[f_val] = conteo_f.get(f_val, 0) + 1
+        fechas_ordenadas = sorted(conteo_f.keys(), reverse=True)
+        if fechas_ordenadas:
+            ultima_fecha_evento = fechas_ordenadas[0]
+        fechas_admin = [{"valor": fv, "total": conteo_f[fv]} for fv in fechas_ordenadas]
+
     return jsonify({
         "rows": sort_registros_by_sector_then_fila(rows),
         "is_admin": is_admin,
         "fecha_hoy": hoy,
+        "ultima_fecha_evento": ultima_fecha_evento,
+        "fechas_disponibles": fechas_admin,
         "current_user_email": user.email,
         "current_user_name": obtener_nombre_captadora(user.email, user)
     })
@@ -1695,6 +1809,8 @@ MESES_NOMBRES_ES = {
     "09": "Septiembre", "10": "Octubre", "11": "Noviembre", "12": "Diciembre"
 }
 
+DIAS_SEMANA_ES = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
+
 
 def formatear_etiqueta_mes(yyyy_mm):
     if not yyyy_mm or len(str(yyyy_mm)) < 7:
@@ -1706,14 +1822,30 @@ def formatear_etiqueta_mes(yyyy_mm):
     return f"{MESES_NOMBRES_ES.get(mes, mes)} {anio}"
 
 
+def formatear_etiqueta_fecha(yyyy_mm_dd):
+    """Convierte '2026-11-01' en 'Dom 01 Noviembre 2026'."""
+    if not yyyy_mm_dd or len(str(yyyy_mm_dd)) < 10:
+        return str(yyyy_mm_dd or "")
+    s = str(yyyy_mm_dd)[:10]
+    try:
+        dt = datetime.date.fromisoformat(s)
+        dia_sem = DIAS_SEMANA_ES[dt.weekday()]
+        mes_nom = MESES_NOMBRES_ES.get(f"{dt.month:02d}", f"{dt.month:02d}")
+        return f"{dia_sem} {dt.day:02d} {mes_nom} {dt.year}"
+    except Exception:
+        return s
+
+
 @app.route('/dashboard/stats')
 def dashboard_stats():
     """
     Genera las métricas reales para los Administradores (Juan y Andrés Acevedo).
-    Soporta filtro de periodo:
-    - periodo=diario (registros del día de hoy en Chile)
+    Soporta filtro de periodo y fechas pasadas:
+    - periodo=diario (registros del día de hoy o ?fecha=YYYY-MM-DD)
+    - periodo=ultimo_evento (registros de la última fecha de Santa Cena con datos, ej. el domingo recién pasado)
+    - periodo=fecha (registros de una fecha exacta seleccionada en ?fecha=YYYY-MM-DD)
     - periodo=ultimo_mes (registros del último mes activo o mes seleccionado en ?mes=YYYY-MM)
-    - periodo=historico (todos los registros históricos)
+    - periodo=historico (todos los registros históricos acumulados)
     """
     supabase_error = require_supabase()
     if supabase_error:
@@ -1733,17 +1865,63 @@ def dashboard_stats():
     hoy = obtener_fecha_hoy()
     mes_actual = hoy[:7]
 
-    # Extraer fecha YYYY-MM-DD (en hora de Chile) y mes YYYY-MM de cada registro
+    # Extraer fecha YYYY-MM-DD (en hora de Chile), mes YYYY-MM y construir resumen histórico por fecha
     meses_set = set()
-    fechas_set = set()
+    fechas_resumen_map = {}
+
     for r in all_rows:
         f_str = extraer_fecha_chile(r.get("fecha_evento") or r.get("created_at")) or hoy
         r["_fecha_norm"] = f_str
         r["_mes_norm"] = f_str[:7]
+        culto_r = (r.get("culto") or inferir_culto_de_fecha(r.get("created_at"))).strip()
+        if culto_r not in ("11:00", "18:30"):
+            culto_r = "11:00"
+        r["_culto_norm"] = culto_r
+
         if len(f_str) == 10:
-            fechas_set.add(f_str)
+            if f_str not in fechas_resumen_map:
+                fechas_resumen_map[f_str] = {
+                    "valor": f_str,
+                    "etiqueta": formatear_etiqueta_fecha(f_str),
+                    "c11": 0,
+                    "c18": 0,
+                    "total": 0,
+                    "captadoras": set(),
+                    "sectores": set()
+                }
+            fechas_resumen_map[f_str]["total"] += 1
+            if culto_r == "11:00":
+                fechas_resumen_map[f_str]["c11"] += 1
+            else:
+                fechas_resumen_map[f_str]["c18"] += 1
+            cap_n = r.get("registrador_nombre") or obtener_nombre_captadora(r.get("registrador_email"))
+            if cap_n:
+                fechas_resumen_map[f_str]["captadoras"].add(cap_n)
+            try:
+                sec_i = int(r.get("sector") or 0)
+                if 1 <= sec_i <= 14:
+                    fechas_resumen_map[f_str]["sectores"].add(sec_i)
+            except (ValueError, TypeError):
+                pass
+
         if len(f_str) >= 7:
             meses_set.add(f_str[:7])
+
+    fechas_ordenadas = sorted(fechas_resumen_map.keys(), reverse=True)
+    ultima_fecha_evento = fechas_ordenadas[0] if fechas_ordenadas else hoy
+
+    historial_fechas = []
+    for fv in fechas_ordenadas:
+        info = fechas_resumen_map[fv]
+        historial_fechas.append({
+            "valor": fv,
+            "etiqueta": info["etiqueta"],
+            "c11": info["c11"],
+            "c18": info["c18"],
+            "total": info["total"],
+            "captadoras_count": len(info["captadoras"]),
+            "sectores_count": len(info["sectores"])
+        })
 
     meses_disponibles = sorted(list(meses_set), reverse=True)
     if not meses_disponibles:
@@ -1752,19 +1930,38 @@ def dashboard_stats():
     # Determinar cuál es el "último mes" (el mes actual si tiene datos, o el mes más reciente con registros)
     ultimo_mes_auto = mes_actual if mes_actual in meses_set else meses_disponibles[0]
 
-    periodo = (request.args.get("periodo") or "diario").strip().lower()
+    periodo = (request.args.get("periodo") or "ultimo_evento").strip().lower()
     mes_param = (request.args.get("mes") or "").strip()[:7]
     fecha_param = (request.args.get("fecha") or "").strip()[:10]
+    fecha_activa = ""
 
-    if periodo == "diario":
-        target_fecha = fecha_param if fecha_param else hoy
+    if periodo == "fecha" or (fecha_param and len(fecha_param) == 10 and periodo in ("diario", "ultimo_evento", "fecha")):
+        target_fecha = fecha_param if (fecha_param and len(fecha_param) == 10) else ultima_fecha_evento
         rows = [r for r in all_rows if r.get("_fecha_norm") == target_fecha]
-        etiqueta_periodo = f"Diario · Hoy ({target_fecha})"
+        es_ultima = (target_fecha == ultima_fecha_evento and target_fecha != hoy)
+        prefijo = "Última Santa Cena" if es_ultima else ("Diario · Hoy" if target_fecha == hoy else "Fecha Específica")
+        etiqueta_periodo = f"{prefijo} · {formatear_etiqueta_fecha(target_fecha)}"
         mes_activo = target_fecha[:7]
+        fecha_activa = target_fecha
+        if periodo == "fecha":
+            periodo = "ultimo_evento" if target_fecha == ultima_fecha_evento else "fecha"
+    elif periodo == "ultimo_evento":
+        target_fecha = ultima_fecha_evento
+        rows = [r for r in all_rows if r.get("_fecha_norm") == target_fecha]
+        prefijo = "Santa Cena Hoy" if (target_fecha == hoy and len(rows) > 0) else "Última Santa Cena"
+        etiqueta_periodo = f"{prefijo} · {formatear_etiqueta_fecha(target_fecha)}"
+        mes_activo = target_fecha[:7]
+        fecha_activa = target_fecha
+    elif periodo == "diario":
+        target_fecha = hoy
+        rows = [r for r in all_rows if r.get("_fecha_norm") == target_fecha]
+        etiqueta_periodo = f"Diario · Hoy ({formatear_etiqueta_fecha(target_fecha)})"
+        mes_activo = target_fecha[:7]
+        fecha_activa = target_fecha
     elif periodo == "ultimo_mes":
         mes_objetivo = mes_param if (mes_param and len(mes_param) == 7) else ultimo_mes_auto
         rows = [r for r in all_rows if r.get("_mes_norm") == mes_objetivo]
-        etiqueta_periodo = f"Último Mes · {formatear_etiqueta_mes(mes_objetivo)}"
+        etiqueta_periodo = f"Mes · {formatear_etiqueta_mes(mes_objetivo)}"
         mes_activo = mes_objetivo
     else:
         periodo = "historico"
@@ -1774,10 +1971,10 @@ def dashboard_stats():
             mes_activo = mes_param
         else:
             rows = list(all_rows)
-            etiqueta_periodo = f"Histórico Completo ({len(all_rows)} registros acumulados)"
+            etiqueta_periodo = f"Histórico Completo ({len(all_rows)} registros en {len(historial_fechas)} fecha(s))"
             mes_activo = "todos"
 
-    # Configuración de sectores 1 a 14 (incluyendo el nuevo Mesón Entrada Norte y Mesón Entrada Sur)
+    # Configuración de sectores 1 a 14 (incluyendo Mesón Entrada Norte y Mesón Entrada Sur)
     sectores_data = {
         s: {
             "sector": s,
@@ -1792,6 +1989,12 @@ def dashboard_stats():
         } for s in range(1, 15)
     }
 
+    mesones_orden = ["Mesón Norte", "Mesón Sur", "Mesón Entrada Norte", "Mesón Entrada Sur"]
+    mesones_data = {
+        m_lbl: {"meson": m_lbl, "c11": 0, "c18": 0, "total": 0}
+        for m_lbl in mesones_orden
+    }
+
     captadoras_map = {}
     total_11 = 0
     total_18 = 0
@@ -1799,7 +2002,7 @@ def dashboard_stats():
     centrales_18 = 0
 
     for r in rows:
-        culto = (r.get("culto") or inferir_culto_de_fecha(r.get("created_at"))).strip()
+        culto = r.get("_culto_norm") or (r.get("culto") or inferir_culto_de_fecha(r.get("created_at"))).strip()
         if culto not in ["11:00", "18:30"]:
             culto = "11:00"
 
@@ -1807,6 +2010,14 @@ def dashboard_stats():
             sector_num = int(r.get("sector") or 0)
         except (ValueError, TypeError):
             sector_num = 0
+
+        if not (1 <= sector_num <= 14) and r.get("fila"):
+            try:
+                sector_num = int(obtener_sector_de_fila(r.get("fila")) or 0)
+            except (ValueError, TypeError):
+                sector_num = 0
+
+        meson_lbl = obtener_mesa_label(sector_num) if 1 <= sector_num <= 14 else ""
 
         # Obtener NOMBRE REAL de la captadora (nunca email crudo)
         nombre_captadora = r.get("registrador_nombre") or obtener_nombre_captadora(r.get("registrador_email"))
@@ -1827,6 +2038,9 @@ def dashboard_stats():
             if 1 <= sector_num <= 14:
                 sectores_data[sector_num]["c11"] += 1
                 sectores_data[sector_num]["captadoras_11"].add(nombre_captadora)
+            if meson_lbl in mesones_data:
+                mesones_data[meson_lbl]["c11"] += 1
+                mesones_data[meson_lbl]["total"] += 1
         else:
             total_18 += 1
             captadoras_map[nombre_captadora]["c18"] += 1
@@ -1835,6 +2049,9 @@ def dashboard_stats():
             if 1 <= sector_num <= 14:
                 sectores_data[sector_num]["c18"] += 1
                 sectores_data[sector_num]["captadoras_18"].add(nombre_captadora)
+            if meson_lbl in mesones_data:
+                mesones_data[meson_lbl]["c18"] += 1
+                mesones_data[meson_lbl]["total"] += 1
 
         if 1 <= sector_num <= 14:
             sectores_data[sector_num]["total"] += 1
@@ -1849,6 +2066,7 @@ def dashboard_stats():
         sectores_list.append(item)
 
     captadoras_list = sorted(captadoras_map.values(), key=lambda x: x["total"], reverse=True)
+    mesones_list = [mesones_data[m_lbl] for m_lbl in mesones_orden]
 
     pct_centrales_11 = round((centrales_11 / total_11 * 100), 1) if total_11 > 0 else 0
     pct_centrales_18 = round((centrales_18 / total_18 * 100), 1) if total_18 > 0 else 0
@@ -1859,21 +2077,43 @@ def dashboard_stats():
     count_sectores_11 = sum(1 for s in sectores_list if s["c11"] > 0)
     count_sectores_18 = sum(1 for s in sectores_list if s["c18"] > 0)
 
-    # Cargar métricas reales usando almacenamiento seguro multicapa
-    metricas = cargar_metricas_seguro()
+    # Nómina ordenada (Sector 1->14, Fila ascendente) para incluir en Informe Ejecutivo PDF del Dashboard
+    rows_ordenadas = sort_registros_by_sector_then_fila(rows)
+    nomina_resumen = []
+    for r in rows_ordenadas:
+        sec_val = r.get("sector") or obtener_sector_de_fila(r.get("fila")) or ""
+        nomina_resumen.append({
+            "nombre": r.get("nombre") or "—",
+            "telefono": normalizar_telefono_chileno(r.get("telefono")) or "",
+            "fila": str(r.get("fila") or "—"),
+            "sector": str(sec_val or "—"),
+            "meson": obtener_mesa_label(sec_val),
+            "culto": r.get("_culto_norm") or r.get("culto") or "11:00",
+            "captadora": r.get("registrador_nombre") or obtener_nombre_captadora(r.get("registrador_email")),
+            "fecha": r.get("_fecha_norm") or hoy
+        })
+
+    # Cargar métricas reales usando almacenamiento seguro multicapa con credenciales respaldadas
+    metricas = cargar_metricas_seguro(user_token)
 
     return jsonify({
         "status": "success",
         "periodo_activo": periodo,
         "etiqueta_periodo": etiqueta_periodo,
         "fecha_hoy": hoy,
+        "fecha_activa": fecha_activa,
+        "ultima_fecha_evento": ultima_fecha_evento,
+        "ultima_fecha_etiqueta": formatear_etiqueta_fecha(ultima_fecha_evento),
         "mes_activo": mes_activo,
         "ultimo_mes_auto": ultimo_mes_auto,
+        "fechas_disponibles": historial_fechas,
+        "historial_fechas": historial_fechas,
         "meses_disponibles": [
             {"valor": m, "etiqueta": formatear_etiqueta_mes(m)} for m in meses_disponibles
         ],
         "conteos_globales": {
             "diario": sum(1 for r in all_rows if r.get("_fecha_norm") == hoy),
+            "ultimo_evento": sum(1 for r in all_rows if r.get("_fecha_norm") == ultima_fecha_evento),
             "ultimo_mes": sum(1 for r in all_rows if r.get("_mes_norm") == ultimo_mes_auto),
             "historico": len(all_rows)
         },
@@ -1890,16 +2130,18 @@ def dashboard_stats():
             "count_zonas_11": count_sectores_11,
             "count_zonas_18": count_sectores_18,
         },
+        "mesones": mesones_list,
         "sectores": sectores_list,
         "zonas": sectores_list,
         "captadoras": captadoras_list,
+        "nomina": nomina_resumen,
         "metricas": metricas
     })
 
 
-def cargar_metricas_seguro():
+def cargar_metricas_seguro(user_token=None):
     """
-    Lee las métricas y la planilla Excel desde Supabase con respaldo multicapa:
+    Lee las métricas y la planilla Excel desde Supabase con respaldo multicapa y multicredencial:
     1. Tabla 'metricas_culto' (si existe).
     2. Registro de sistema '__SYS_METRICAS_%' en la tabla 'contactos' (garantizado al 100%).
     """
@@ -1916,31 +2158,61 @@ def cargar_metricas_seguro():
 
     cand_table = None
     try:
-        res = supabase.table("metricas_culto").select("*").order("updated_at", desc=True).limit(1).execute()
-        if res.data:
-            row = dict(res.data[0])
-            obs_raw = str(row.get("observaciones") or "").strip()
-            if obs_raw.startswith('{"__excel_v2":'):
-                try:
-                    parsed = json.loads(obs_raw)
-                    row["observaciones"] = parsed.get("notas", "")
-                    row["excel_data"] = parsed.get("excel_data")
-                    row["updated_ts"] = parsed.get("updated_ts", 1)
-                except Exception:
-                    pass
-            cand_table = row
+        try:
+            rows_m = ejecutar_lectura_completa(
+                lambda: supabase.table("metricas_culto").select("*").order("updated_at", desc=True).limit(5).execute(),
+                user_token
+            )
+        except Exception:
+            rows_m = ejecutar_lectura_completa(
+                lambda: supabase.table("metricas_culto").select("*").limit(5).execute(),
+                user_token
+            )
+        if rows_m:
+            best_row = None
+            best_ts = -1
+            for rm in rows_m:
+                row = dict(rm)
+                obs_raw = str(row.get("observaciones") or "").strip()
+                if obs_raw.startswith('{"__excel_v2":'):
+                    try:
+                        parsed = json.loads(obs_raw)
+                        row["observaciones"] = parsed.get("notas", "")
+                        row["excel_data"] = parsed.get("excel_data")
+                        row["updated_ts"] = parsed.get("updated_ts", 1)
+                    except Exception:
+                        pass
+                ts_val = int(row.get("updated_ts") or 0)
+                if ts_val >= best_ts:
+                    best_ts = ts_val
+                    best_row = row
+            cand_table = best_row
     except Exception:
         pass
 
     cand_contactos = None
     try:
-        res_c = supabase.table("contactos").select("id, nombre, telefono").ilike("nombre", "__SYS_METRICAS_%").execute()
-        rows_c = res_c.data or []
+        rows_c = ejecutar_lectura_completa(
+            lambda: supabase.table("contactos").select("id, nombre, telefono").ilike("nombre", "__SYS_METRICAS_%").limit(200).execute(),
+            user_token
+        )
         if rows_c:
             single = [r for r in rows_c if str(r.get("nombre", "")).startswith("__SYS_METRICAS_V2__:")]
             if single:
-                raw_json = str(single[0]["nombre"])[len("__SYS_METRICAS_V2__:"):]
-                cand_contactos = json.loads(raw_json)
+                # Si hubiera más de uno, elegir el de mayor updated_ts
+                best_parsed = None
+                best_ts_c = -1
+                for s_row in single:
+                    try:
+                        raw_json = str(s_row["nombre"])[len("__SYS_METRICAS_V2__:"):]
+                        p_obj = json.loads(raw_json)
+                        t_c = int(p_obj.get("updated_ts") or 0)
+                        if t_c >= best_ts_c:
+                            best_ts_c = t_c
+                            best_parsed = p_obj
+                    except Exception:
+                        pass
+                cand_contactos = best_parsed
             else:
                 chunks = [r for r in rows_c if str(r.get("nombre", "")).startswith("__SYS_METRICAS_CHUNK_")]
                 if chunks:
@@ -1964,7 +2236,7 @@ def cargar_metricas_seguro():
     return defaults
 
 
-def guardar_metricas_seguro(payload_db, full_record):
+def guardar_metricas_seguro(payload_db, full_record, user_token=None):
     """
     Guarda las métricas y la planilla Excel en Supabase garantizando que nunca falle:
     Intenta en 'metricas_culto' y además guarda respaldo íntegro en 'contactos'.
@@ -1972,13 +2244,16 @@ def guardar_metricas_seguro(payload_db, full_record):
     ok_table = False
     err_msgs = []
 
-    # 1. Intentar en tabla metricas_culto
-    try:
+    # 1. Intentar en tabla metricas_culto con respaldo de credenciales
+    def _save_table():
         existing = supabase.table("metricas_culto").select("id").limit(1).execute()
         if existing.data:
             supabase.table("metricas_culto").update(payload_db).eq("id", existing.data[0]["id"]).execute()
         else:
             supabase.table("metricas_culto").insert(payload_db).execute()
+
+    try:
+        ejecutar_con_respaldo_auth(_save_table, user_token)
         ok_table = True
     except Exception as e:
         err_msgs.append(f"metricas_culto: {e}")
@@ -1986,7 +2261,8 @@ def guardar_metricas_seguro(payload_db, full_record):
     # 2. Guardar siempre en tabla 'contactos' (que existe 100% en Supabase)
     ok_contactos = False
     full_json = json.dumps(full_record, ensure_ascii=False)
-    try:
+
+    def _save_contactos():
         prev = supabase.table("contactos").select("id").ilike("nombre", "__SYS_METRICAS_%").execute()
         for r in (prev.data or []):
             supabase.table("contactos").delete().eq("id", r["id"]).execute()
@@ -1996,7 +2272,6 @@ def guardar_metricas_seguro(payload_db, full_record):
                 "nombre": f"__SYS_METRICAS_V2__:{full_json}",
                 "telefono": "56900000000"
             }).execute()
-            ok_contactos = True
         except Exception:
             chunk_size = 180
             chunks = [full_json[i:i+chunk_size] for i in range(0, len(full_json), chunk_size)]
@@ -2005,7 +2280,10 @@ def guardar_metricas_seguro(payload_db, full_record):
                     "nombre": f"__SYS_METRICAS_CHUNK_{idx:04d}__:{ch}",
                     "telefono": "56900000000"
                 }).execute()
-            ok_contactos = True
+
+    try:
+        ejecutar_con_respaldo_auth(_save_contactos, user_token)
+        ok_contactos = True
     except Exception as e2:
         err_msgs.append(f"contactos_backup: {e2}")
 
@@ -2027,8 +2305,10 @@ def admin_metricas_culto():
     if not require_admin(user):
         return jsonify({"status": "error", "message": "Acceso restringido solo a los administradores (Juan y Andrés Acevedo)"}), 403
 
+    user_token = get_bearer_token()
+
     if request.method == 'GET':
-        metricas = cargar_metricas_seguro()
+        metricas = cargar_metricas_seguro(user_token)
         return jsonify({"status": "success", "metricas": metricas})
 
     data = request.get_json(silent=True) or {}
@@ -2075,7 +2355,7 @@ def admin_metricas_culto():
         "updated_ts": now_ts
     }
 
-    saved_ok, err_detail = guardar_metricas_seguro(payload_db, full_record)
+    saved_ok, err_detail = guardar_metricas_seguro(payload_db, full_record, user_token=user_token)
     if saved_ok:
         return jsonify({
             "status": "success",
@@ -2181,29 +2461,58 @@ def admin_export():
         return jsonify({"status": "error", "message": "Acceso solo administrador"}), 403
 
     user_token = get_bearer_token()
-    rows = sort_registros_by_sector_then_fila(obtener_todos_los_registros(user_token))
+    hoy = obtener_fecha_hoy()
+    fecha_filtro = (request.args.get("fecha") or "").strip()[:10]
+    mes_filtro = (request.args.get("mes") or "").strip()[:7]
+    culto_filtro = (request.args.get("culto") or "").strip()
+
+    all_rows = obtener_todos_los_registros(user_token)
+    rows_limpias = []
+    for r in all_rows:
+        item = dict(r)
+        f_norm = extraer_fecha_chile(item.get("fecha_evento") or item.get("created_at")) or hoy
+        c_norm = (item.get("culto") or inferir_culto_de_fecha(item.get("created_at"))).strip()
+        sec_val = item.get("sector") or obtener_sector_de_fila(item.get("fila")) or ""
+        item["fecha_evento"] = f_norm
+        item["culto"] = c_norm
+        item["sector"] = str(sec_val)
+        item["meson"] = obtener_mesa_label(sec_val)
+        item["registrador_nombre"] = item.get("registrador_nombre") or obtener_nombre_captadora(item.get("registrador_email"))
+
+        if fecha_filtro and fecha_filtro not in ("todos", "hoy") and len(fecha_filtro) == 10:
+            if f_norm != fecha_filtro:
+                continue
+        elif fecha_filtro == "hoy":
+            if f_norm != hoy:
+                continue
+        if mes_filtro and len(mes_filtro) == 7:
+            if f_norm[:7] != mes_filtro:
+                continue
+        if culto_filtro and culto_filtro != "todos":
+            if c_norm != culto_filtro:
+                continue
+        rows_limpias.append(item)
+
+    rows = sort_registros_by_sector_then_fila(rows_limpias)
 
     output = io.StringIO()
+    output.write("\ufeff")  # UTF-8 BOM para compatibilidad directa con Excel
     columnas_base = [
-        "id", "nombre", "telefono", "fila", "sector", "culto",
-        "fecha_evento", "registrador_nombre", "registrador_email", "created_at"
+        "fecha_evento", "culto", "sector", "meson", "fila",
+        "nombre", "telefono", "registrador_nombre", "registrador_email", "id"
     ]
     if rows:
-        extra_cols = []
-        for r in rows:
-            for k in r.keys():
-                if k not in columnas_base and k not in extra_cols:
-                    extra_cols.append(k)
-        writer = csv.DictWriter(output, fieldnames=columnas_base + extra_cols, extrasaction="ignore")
+        writer = csv.DictWriter(output, fieldnames=columnas_base, extrasaction="ignore")
         writer.writeheader()
         writer.writerows(rows)
     else:
         output.write(",".join(columnas_base) + "\n")
 
+    sufijo = fecha_filtro if (fecha_filtro and fecha_filtro != "todos") else (mes_filtro or "historico")
     return Response(
         output.getvalue(),
-        mimetype="text/csv",
-        headers={"Content-Disposition": "attachment;filename=export_santa_cena.csv"}
+        mimetype="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f"attachment;filename=santa_cena_{sufijo}.csv"}
     )
 
 # ======================
